@@ -22,6 +22,13 @@
 				<span>💸 {recipe.costEstimate.amount} {recipe.costEstimate.currency}</span>
 			{/if}
 		</div>
+		{#if recipe.dietFlags.length}
+			<div class="card__tags">
+				{#each recipe.dietFlags as flag (flag)}
+					<span class="card__tag card__tag--diet">{flag}</span>
+				{/each}
+			</div>
+		{/if}
 		{#if recipe.tags.length}
 			<div class="card__tags">
 				{#each recipe.tags as tag (tag)}
@@ -84,6 +91,12 @@
 		border-radius: var(--radius-pill);
 		background: var(--bg-surface-alt);
 		color: var(--text-secondary);
+
+		&--diet {
+			background: var(--status-success);
+			color: white;
+			font-weight: 600;
+		}
 	}
 	.card__match {
 		margin: var(--space-2) 0 0;
