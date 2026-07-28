@@ -1,4 +1,4 @@
-import type { MacroSummary, RecipeDetail, Substitution } from '$lib/types/recipe';
+import type { MacroSummary, RecipeDetail, ReactionSummary, Substitution } from '$lib/types/recipe';
 
 /** Applies a chosen substitution's macro delta on top of the recipe's own base macros. */
 export function applySubstitution(base: MacroSummary, sub: Substitution): MacroSummary {
@@ -11,13 +11,31 @@ export function applySubstitution(base: MacroSummary, sub: Substitution): MacroS
 	};
 }
 
+/** upCount - downCount, absent reactions treated as 0/0. Shared by the sort below and the
+ *  "recognized" graduation threshold (Section 4.4/6.4) — one definition of "net score," not two
+ *  that could silently drift apart. */
+export function netReactionScore(reactions: ReactionSummary | undefined): number {
+	return (reactions?.upCount ?? 0) - (reactions?.downCount ?? 0);
+}
+
 /** Sorts a substitution list the way the community's own upvotes/downvotes decide, per CLAUDE.md 6.4. */
 export function sortSubstitutionsByReaction(subs: Substitution[]): Substitution[] {
-	return [...subs].sort((a, b) => {
-		const scoreA = (a.reactions?.upCount ?? 0) - (a.reactions?.downCount ?? 0);
-		const scoreB = (b.reactions?.upCount ?? 0) - (b.reactions?.downCount ?? 0);
-		return scoreB - scoreA;
-	});
+	return [...subs].sort((a, b) => netReactionScore(b.reactions) - netReactionScore(a.reactions));
+}
+
+/**
+ * "Community-sourced substitutions graduating into a 'recognized' alternative once they cross a
+ * reaction threshold" (CLAUDE.md 4.4/6.4, previously flagged as "deliberately not built"). Crossing
+ * this threshold only makes a substitution ELIGIBLE for the `/moderation` queue — it does NOT
+ * itself grant the "recognized" badge, which still needs an explicit moderator action
+ * (`substitutionModerationStore.markRecognized`) — see that store's own header comment for why.
+ * `source: 'system'` substitutions are never eligible: they're already the curated/official
+ * option, "recognized" is specifically the community-earned-trust label.
+ */
+export const RECOGNITION_THRESHOLD = 10;
+
+export function isEligibleForRecognition(sub: Substitution): boolean {
+	return sub.source === 'community' && netReactionScore(sub.reactions) >= RECOGNITION_THRESHOLD;
 }
 
 /**

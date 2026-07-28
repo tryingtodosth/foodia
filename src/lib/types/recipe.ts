@@ -7,6 +7,12 @@ export interface UserRef {
 	id: string;
 	displayName: string;
 	avatarUrl: string | null;
+	/** Session 13 — the one flag this app's moderation queue (`/moderation`) gates on, same
+	 *  minimal-flag shape `2do`'s own `isNodeSuperadmin` uses for an analogous "who's allowed to
+	 *  act here" question. Absent/false for every account except the one fixture designated a
+	 *  moderator (`piotr`, recipes.mock.ts) — there's no admin UI to grant/revoke this, same
+	 *  honesty every other mock-era role flag in this codebase already carries. */
+	isModerator?: boolean;
 }
 
 export interface MacroSummary {

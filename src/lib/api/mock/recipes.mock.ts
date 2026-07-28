@@ -3,7 +3,11 @@ import type { RecipeDetail } from '$lib/types/recipe';
 // Exported (Session 8) so lib/api/mock/auth.mock.ts can reuse the exact same two people as its own
 // mock accounts, rather than inventing a second, disconnected pair — same "reuse existing fixtures,
 // don't invent new people" discipline 2do's own auth.mock.ts already establishes.
-export const piotr = { id: 'u1', displayName: 'Piotr P.', avatarUrl: null };
+// Session 13 — `piotr` is the one account designated a moderator (`isModerator: true`), the
+// gate `/moderation` checks. Chosen arbitrarily between the two existing identities (there's no
+// real role-granting UI in this mock-only app), same "power user" convention `2do`'s own
+// superadmin fixture already establishes.
+export const piotr = { id: 'u1', displayName: 'Piotr P.', avatarUrl: null, isModerator: true };
 export const ania = { id: 'u2', displayName: 'Ania K.', avatarUrl: null };
 
 export const spaghettiBolognese: RecipeDetail = {

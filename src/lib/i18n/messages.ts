@@ -237,7 +237,33 @@ const pl = {
 	'auth.passwordReset.backToLogin': '← Wróć do logowania',
 	'auth.nav.login': 'Zaloguj',
 	'auth.nav.register': 'Zarejestruj',
-	'auth.nav.logout': 'Wyloguj'
+	'auth.nav.logout': 'Wyloguj',
+
+	'moderation.pageTitle': 'Moderacja',
+	'moderation.accessDenied': 'Brak dostępu — ta strona jest tylko dla moderatorów.',
+	'moderation.commentRemoved': 'Komentarz usunięty przez moderatora.',
+	'moderation.reportToggle': '🚩 Zgłoś',
+	'moderation.reportedLabel': 'Zgłoszono',
+	'moderation.reportReasonLabel': 'Powód',
+	'moderation.reasonSpam': 'Spam',
+	'moderation.reasonAbuse': 'Obraźliwa treść',
+	'moderation.reasonUnsafe': 'Niebezpieczna porada',
+	'moderation.reasonOther': 'Inne',
+	'moderation.reportSubmit': 'Wyślij zgłoszenie',
+	'moderation.stepLabel': 'Krok {n}',
+	'moderation.recognizedBadge': 'Sprawdzone przez społeczność',
+	'moderation.pendingReportsHeading': 'Zgłoszone komentarze',
+	'moderation.noReports': 'Brak zgłoszeń do przejrzenia.',
+	'moderation.removeAction': 'Usuń komentarz',
+	'moderation.dismissAction': 'Odrzuć zgłoszenie',
+	'moderation.reportedByLabel': 'Zgłosił(a):',
+	'moderation.onRecipeLabel': 'W przepisie:',
+	'moderation.eligibleHeading': 'Substytucje do wyróżnienia',
+	'moderation.noEligible': 'Żadna substytucja nie osiągnęła jeszcze progu.',
+	'moderation.markRecognized': 'Oznacz jako sprawdzone',
+	'moderation.recognizedHeading': 'Już wyróżnione',
+	'moderation.unmark': 'Cofnij',
+	'moderation.netScore': '+{n} głosów netto'
 } as const;
 
 const en = {
@@ -468,7 +494,33 @@ const en = {
 	'auth.passwordReset.backToLogin': '← Back to log in',
 	'auth.nav.login': 'Log in',
 	'auth.nav.register': 'Sign up',
-	'auth.nav.logout': 'Log out'
+	'auth.nav.logout': 'Log out',
+
+	'moderation.pageTitle': 'Moderation',
+	'moderation.accessDenied': 'Access denied — this page is for moderators only.',
+	'moderation.commentRemoved': 'Comment removed by a moderator.',
+	'moderation.reportToggle': '🚩 Report',
+	'moderation.reportedLabel': 'Reported',
+	'moderation.reportReasonLabel': 'Reason',
+	'moderation.reasonSpam': 'Spam',
+	'moderation.reasonAbuse': 'Abusive content',
+	'moderation.reasonUnsafe': 'Unsafe advice',
+	'moderation.reasonOther': 'Other',
+	'moderation.reportSubmit': 'Submit report',
+	'moderation.stepLabel': 'Step {n}',
+	'moderation.recognizedBadge': 'Community-verified',
+	'moderation.pendingReportsHeading': 'Reported comments',
+	'moderation.noReports': 'No reports to review.',
+	'moderation.removeAction': 'Remove comment',
+	'moderation.dismissAction': 'Dismiss report',
+	'moderation.reportedByLabel': 'Reported by:',
+	'moderation.onRecipeLabel': 'In recipe:',
+	'moderation.eligibleHeading': 'Substitutions ready to verify',
+	'moderation.noEligible': "No substitution has crossed the threshold yet.",
+	'moderation.markRecognized': 'Mark as verified',
+	'moderation.recognizedHeading': 'Already verified',
+	'moderation.unmark': 'Undo',
+	'moderation.netScore': '+{n} net votes'
 } satisfies Record<keyof typeof pl, string>;
 
 export const messages = { pl, en };

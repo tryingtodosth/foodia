@@ -14,6 +14,9 @@
 	<details class="account-menu">
 		<summary>{authStore.account.displayName}</summary>
 		<div class="account-menu__panel">
+			{#if authStore.account.isModerator}
+				<a href="/moderation">{t('moderation.pageTitle')}</a>
+			{/if}
 			<button type="button" onclick={handleLogout}>{t('auth.nav.logout')}</button>
 		</div>
 	</details>
@@ -67,7 +70,9 @@
 		z-index: 10;
 		min-width: 120px;
 
-		button {
+		button,
+		a {
+			display: block;
 			width: 100%;
 			text-align: left;
 			background: none;
@@ -77,11 +82,18 @@
 			cursor: pointer;
 			font-family: inherit;
 			font-size: 13px;
-			color: var(--status-danger);
+			text-decoration: none;
+			box-sizing: border-box;
 
 			&:hover {
 				background: var(--bg-surface-alt);
 			}
+		}
+		button {
+			color: var(--status-danger);
+		}
+		a {
+			color: var(--text-primary);
 		}
 	}
 </style>

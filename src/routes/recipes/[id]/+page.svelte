@@ -4,6 +4,7 @@
 		sortSubstitutionsByReaction,
 		filterSafeSubstitutions
 	} from '$lib/utils/substitution';
+	import { substitutionModerationStore } from '$lib/state/substitutionModeration.svelte';
 	import {
 		stepNeedsAlternative,
 		sortAlternativesByReaction,
@@ -247,6 +248,9 @@
 							→ {ingredient.quantity * chosen.ratio}
 							{ingredient.unit}
 							{chosen.name}
+							{#if substitutionModerationStore.isRecognized(chosen.id)}
+								<span class="recognized-badge" title={t('moderation.recognizedBadge')}>⭐</span>
+							{/if}
 						{:else}
 							{ingredient.quantity} {ingredient.unit} {ingredient.name}
 						{/if}
@@ -269,6 +273,9 @@
 									<li class="swap-row">
 										<button class="swap-choose" onclick={() => chooseSubstitution(ingredient.id, sub.id)}>
 											{sub.name}
+											{#if substitutionModerationStore.isRecognized(sub.id)}
+												<span class="recognized-badge" title={t('moderation.recognizedBadge')}>⭐</span>
+											{/if}
 										</button>
 										<ReactionButtons reactions={sub.reactions} compact />
 									</li>
@@ -283,7 +290,10 @@
 					/>
 				{/if}
 				{#each commentsFor('ingredient', ingredient.id) as comment (comment.id)}
-					<CommentItem {comment} />
+					<CommentItem
+						{comment}
+						context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel: ingredient.name }}
+					/>
 				{/each}
 				<CommentComposer
 					onsubmit={(content, visibility) => addComment('ingredient', ingredient.id, content, visibility)}
@@ -358,7 +368,10 @@
 						proposeStepAlternative(step.id, text, requiresEquipment, durationMinutes)}
 				/>
 				{#each commentsFor('step', step.id) as comment (comment.id)}
-					<CommentItem {comment} />
+					<CommentItem
+						{comment}
+						context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel: t('moderation.stepLabel', { n: step.order }) }}
+					/>
 				{/each}
 				<CommentComposer
 					onsubmit={(content, visibility) => addComment('step', step.id, content, visibility)}
@@ -424,6 +437,9 @@
 	}
 	.muted {
 		color: var(--text-secondary);
+	}
+	.recognized-badge {
+		font-size: 12px;
 	}
 	.swap summary {
 		cursor: pointer;
