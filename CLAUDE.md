@@ -1,0 +1,633 @@
+# Foodia — Product & Technical Blueprint
+
+**Status:** source of truth for the Foodia frontend (SvelteKit + Capacitor), built mock-first and detached from the Django backend — same working pattern already proven on the `2do` project (see `/home/alojzy/Downloads/CLAUDE.md` for that project's version of this exact approach; not otherwise related to Foodia's domain, but the *pattern* — Card/Detail split, mock fixtures behind an interface, node-based comments, framework-agnostic permission/util functions — is worth reusing rather than reinventing).
+
+**Grounded in:** the founder's own brain-dump (five core modules, five user journeys, five failure-mode passes, and three "further develop" rounds covering D3 graphs, creator economy, and globalization). Nothing below is invented from scratch — it's that material organized, de-duplicated, given a data model, phased into buildable slices, and stress-tested for gaps.
+
+**Legend** (status of each item below):
+
+| Mark | Meaning |
+|---|---|
+| 🎯 P1 | MVP — building now |
+| 🧩 P2 | Next slice — designed, not started |
+| 🔮 P3 | Later — brainstorm-grade, needs its own design pass before building |
+| ⚠️ | Open question — my working assumption, flagged so you can redirect |
+| ❓ | Needs your explicit call — listed in Section 8, not decided by me |
+
+---
+
+## 0. What Foodia is
+
+A cooking assistant for a time-poor, budget-conscious cook (core persona: women 25–35) that (1) understands their kitchen and constraints before they start, (2) plans a realistic week around real budget/time/context limits, (3) turns a plan into a shopping list that closes the loop with e-grocery, (4) gets out of the way while they're actually cooking with dirty hands, and (5) treats every recipe as a living, forkable, commentable graph rather than a static block of text — the same shape a real kitchen conversation ("use 4 cloves, not 2") actually has.
+
+The single biggest architectural bet in this whole document: **a recipe is a graph, not a document.** Ingredients, steps, and substitutions are addressable nodes with their own comments, reactions, and relationships — not fields inside one text blob. Everything else (node-based comments, D3 relationship graphs, substitution voting, versioning) falls out of that one decision instead of needing its own bespoke mechanism.
+
+---
+
+## 1. Tech stack & architecture decisions
+
+- **Frontend:** SvelteKit + TypeScript + SCSS, packaged for iOS/Android via **Capacitor** (🎯 **web-shell built, Session 6** — see 6.1; native platforms not yet scaffolded, no Android SDK/Xcode in this environment to verify a real native build against). Confirmed by you; not revisited here.
+- **Backend:** Django (relational DB, scraping, business logic) — confirmed direction, **not started in this repo**. ⚠️ Assumption: this frontend is built **mock-first**, exactly like `2do` — an `Ingredient/Step/Recipe` shape is defined once as a TypeScript contract, mock fixtures satisfy it, and a real `httpApiClient` swaps in later behind one interface (Section 5). If a Django project already exists elsewhere and you want this wired to it from day one instead, say so — that changes the sequencing, not the data model.
+- **Offline-first is a real requirement, not a nice-to-have** — the founder's own "Creator Economy & Community" round is explicit that pantry data, downloaded meal plans, and cooking-mode media must work in a basement with no signal. That means: local persistence (Capacitor's SQLite plugin, or IndexedDB for the PWA-only path) for Pantry and the active week's MealPlan, service-worker caching for a downloaded plan's assets, and a sync layer that reconciles local writes against the server once connectivity returns. This is scoped as 🧩 P2 (see 6.1) — P1 runs entirely against mock data with no real offline/sync story yet, since there's nothing to sync against.
+- **One repo for now.** Frontend and (future) backend as separate repos, matching `2do`'s own split. Revisit if a monorepo turns out to matter once the backend exists.
+
+---
+
+## 2. Phasing (my proposed cut — redirectable, see Section 8)
+
+The founder's brain-dump is roughly 3x MVP scope by itself — five core modules is already a lot, and the three "further develop" rounds (D3 graphs, creator economy/royalties, live translation, neighbor pantry-sharing, voice commands) are each their own project. Rather than build breadth-first across all five modules at brainstorm depth, this phases depth-first through the two modules that are Foodia's actual differentiators, then widens.
+
+- **🎯 P1 — done:** the Recipe Graph Engine (Module 2) and Cooking Mode (Module 3) — the two ideas that don't exist anywhere else and that everything downstream depends on. Read-only browsing + a minimal onboarding profile + a client-only Pantry checklist, all against mock fixtures. Node-based comments (public/private) and substitution upvote/downvote (Module 4's write-side) pulled forward from P2 and built too, since neither needs a backend — see 4.4. A manual weekly meal planner (`/plan`) pulled forward too, honestly distinct from the real AI Wizard — see 6.2.
+- **🎯 P1 — also done (Session 6):** interface localization (PL/EN, a real switcher in both the navbar and footer, SSR-correct) and a community content-translation system for recipes (view-original, submit a translation or a same-language revision suggestion, vote among competing submissions) — see 4.6. Neither needed a backend, same reasoning that pulled the rest of Module 4 and the manual planner forward early.
+- **🎯 P1 — also done (Session 6):** the Capacitor web-shell (a second, static build target from the same codebase) — see 6.1. Native platform scaffolding (`npx cap add android/ios`) deliberately not run — no Android SDK/Xcode in this environment to verify a real native build against, flagged rather than faked.
+- **🎯 P1 — also done (Session 7 research + Session 8 build):** a 47-Reddit-thread competitive research pass (`FUTURES.md`, new) surfaced Search & Filtering (4.7, speced but not built) and User Accounts (4.8, **built** Session 8) as the two most concrete, buildable-now gaps — a real login/register/logout system, deliberately not gating anything, since this app's own Progressive Profiling principle (4.1) predates and outranks it.
+- **🧩 P2 — next:** running the native platform setup on a machine that actually has the SDKs, wiring real Capacitor plugins (camera barcode scan, Wake Lock/Local Notifications native fallbacks) once a platform exists to test them against, a real e-grocery API partnership (the copy-to-clipboard export built in Session 5 is the honest MVP stand-in, see 4.5), comment moderation and substitution "recognized" graduation, Search & Filtering (4.7), pantry deduplication (4.5). The Pantry-vs-`MealPlan` aggregation itself is **done** (Session 5) — see 4.5.
+- **🔮 P3 — the real AI Meal Planning Wizard**, blocked on a real backend/LLM (unchanged assessment, 6.2).
+- **🔮 P3:** D3 relationship graphs, the Creator Economy (tips, royalty split, "Plemiona" community hubs, shareable presets/deep-linking), live **AI** translation of community threads + AI-driven unit conversion (6.5 — distinct from Session 6's manual community translation, which is a real, non-AI system already built), neighbor pantry-sharing, "Cook Along" presence, voice commands, rescue-protocol menus.
+
+---
+
+## 3. Core data model — the Recipe Graph Engine
+
+Same "Card vs Detail" weight split `2do` uses, for the same reason: a feed of many recipes needs a light shape, a recipe actually being cooked needs the full graph. `id` is always `string`.
+
+```typescript
+// lib/types/recipe.ts
+export type NodeType = 'ingredient' | 'step' | 'substitution';
+
+export interface UserRef {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export interface MacroSummary {
+  kcal: number;
+  proteinG: number;
+  fatG: number;
+  carbsG: number;
+}
+
+export interface ReactionSummary {           // reused verbatim for substitutions, tips, comments
+  upCount: number;
+  downCount: number;
+  currentUserReaction: 'up' | 'down' | null;
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;                              // g, ml, szt, łyżka — no fixed vocabulary yet
+  substitutable: boolean;
+  substitutions?: Substitution[];            // Detail-only
+}
+
+export interface Substitution {
+  id: string;
+  forIngredientId: string;
+  name: string;
+  ratio: number;                             // conversion factor against the original quantity
+  deltaMacros?: Partial<MacroSummary>;       // delta applied to the whole recipe if chosen
+  reactions?: ReactionSummary;                // community up/down — drives default sort order
+  source: 'system' | 'community';
+  proposedBy?: UserRef;                       // absent for 'system'
+}
+
+export interface Step {
+  id: string;
+  order: number;
+  text: string;
+  durationMinutes?: number;                   // presence of this is what renders a tappable Timer chip
+  requiresEquipment?: string[];                // HardwareProfile keys — absence of the gear hides/adapts this step
+  ingredientIds: string[];
+}
+
+export interface RecipeVersion {              // "Budżetowa" / "15 minut" / "Wegetariańska"
+  id: string;
+  label: string;
+  parentRecipeId: string | null;
+}
+
+export interface RecipeCard {
+  id: string;
+  name: string;
+  summary: string;
+  heroImage: string;
+  author: UserRef;
+  tags: string[];
+  dietFlags: string[];                        // vegan, keto, gluten-free... loose, no fixed vocabulary
+  requiredEquipment: string[];
+  timeMinutes: number;
+  costEstimate?: { amount: number; currency: string };
+  macros: MacroSummary;
+  reactions?: ReactionSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecipeDetail extends RecipeCard {
+  description: string;
+  ingredients: Ingredient[];
+  steps: Step[];
+  versions?: RecipeVersion[];
+  comments?: NodeComment[];                   // flat + target, same "flat not pre-nested" call 2do made
+  relationships?: RecipeRelationship[];        // 🔮 P3 — D3 graph edges, see 6.3
+}
+
+// Node-based comments — the actual point of Module 4. A comment targets a specific
+// Ingredient or Step, not the recipe as a whole.
+export interface NodeComment {
+  id: string;
+  target: { type: NodeType; id: string };
+  content: string;
+  visibility: 'public' | 'private';           // private = visible only to its author, never synced to others
+  author: UserRef;
+  reactions?: ReactionSummary;
+  createdAt: string;
+}
+
+export interface RecipeRelationship {         // 🔮 P3 — see 6.3
+  id: string;
+  from: { type: 'recipe' | NodeType; id: string };
+  to: { type: 'recipe' | NodeType; id: string; label: string };
+  relationshipType: string;                   // 'is_alternative_to' | 'evolved_from' | 'base_of' | ...
+  source: 'system' | 'community';
+}
+```
+
+```typescript
+// lib/types/user.ts
+export interface HardwareProfile {
+  oven: boolean;
+  microwave: boolean;
+  airfryer: boolean;
+  blenderJug: boolean;
+  kitchenScale: boolean;
+  // extensible — a plain boolean map keeps Step.requiresEquipment trivial to check against
+}
+
+export interface DietProfile {
+  diet: string;                               // 'omnivore' | 'vegan' | 'vegetarian' | 'keto' | ... loose
+  allergies: string[];                        // hard constraint — see 4.1's guardrail note
+  goals: string[];                             // 'weight_loss' | 'easy_digestion' | ...
+}
+
+export interface UserProfile {
+  id: string;
+  displayName: string;
+  diet: DietProfile;
+  hardware: HardwareProfile;
+  activeSubProfileId?: string;                 // 🧩 P2 — "Goście w weekend" / "Gotowanie dla partnera"
+}
+```
+
+```typescript
+// lib/types/pantry.ts
+export interface PantryItem {
+  id: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  updatedAt: string;
+}
+
+export interface MealSlot {
+  slot: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  recipeId: string;
+  versionId?: string;
+  servings: number;
+}
+
+export interface MealPlanDay {
+  date: string;                                // ISO date
+  meals: MealSlot[];
+}
+
+export interface MealPlan {
+  id: string;
+  userId: string;
+  weekStart: string;                           // ISO date, Monday
+  budget?: { amount: number; currency: string };
+  days: MealPlanDay[];
+}
+```
+
+**Deliberately not built yet, flagged rather than faked:** a real nutrition database backing `MacroSummary`/`deltaMacros` (today these are hand-authored numbers on mock fixtures, not computed from any ingredient-level nutrition table — see 8B, this needs a real data source before it can be trusted for anything health-related), and unit-conversion tables (`cup` → `g` is ingredient-density-dependent, not a fixed ratio — see 7's issue list).
+
+**Session 6 addition — content translation** (4.6's own data model, `RecipeCard`/`RecipeDetail` gained fields, `Translation` is new):
+
+```typescript
+// lib/types/recipe.ts — additions
+export interface RecipeCard {
+  // ...all fields above, plus:
+  sourceLocale?: string;                        // absent means 'pl' — every mock fixture is Polish-authored
+}
+
+export type TranslatableField = 'name' | 'summary' | 'description';
+
+export interface Translation {
+  id: string;
+  recipeId: string;
+  locale: string;                               // not constrained to the interface's own UiLocale — see 4.6
+  fields: Partial<Record<TranslatableField, string>>;
+  translatedBy: UserRef;
+  reactions?: ReactionSummary;                  // lets the community vote among competing submissions
+  createdAt: string;
+}
+
+export interface RecipeDetail extends RecipeCard {
+  // ...all fields above, plus:
+  translations?: Translation[];                 // Detail-only, same weight-split as comments/relationships
+}
+```
+
+---
+
+## 4. Module specs
+
+### 4.1 User Context Engine 🎯 P1 (core) / 🧩 P2 (sub-profiles)
+
+Onboarding collects `DietProfile` + `HardwareProfile` before the first real recommendation. Two improvements over the original brain-dump, worth calling out:
+
+- **Progressive profiling, not a hard gate.** If onboarding is skipped, the app runs a "Neutral" profile (balanced, popular recipes) and infers preferences from repeated rejections rather than blocking the front door on a form — this was already in the founder's own failure-mode pass, kept here as a P1 requirement, not deferred, since a real quiz with zero fallback is a real drop-off risk.
+- **Allergy guardrails are a hard constraint, enforced in code, never an AI suggestion.** ✅ **Built (Session 9)** — see 4.2's own "Ingredient Alternatives" subsection for `filterSafeSubstitutions`, the function that's actually structurally incapable of letting an unsafe swap reach the UI.
+- ✅ **Built (Session 9) — the "temporarily disable broken equipment" override from the failure-mode brain-dump.** What used to be flagged here as needing "a real per-recipe re-derivation of alternate cooking methods" is now the Device/Equipment Alternatives module — see the new 4.9.
+
+### 4.2 Graph Recipe Engine 🎯 P1
+
+The centerpiece. Built this session as static-graph browsing (Section 3's types + mock fixtures); substitution math (recompute `MacroSummary`/`timeMinutes` when a swap is chosen) is real client-side logic, not mocked. **Versioning** (`RecipeVersion`) ships as a simple parent/variant list in P1 — the founder's "evolution tree" (a Decision A → B → C ancestry, rendered as a graph) is 🔮 P3 (6.3), since it needs real relationship data, not just a flat variants array.
+
+⚠️ **A foundational gap, surfaced by the Session 7 research pass (see `FUTURES.md` Section 4), worth stating plainly rather than leaving implicit:** there is currently no way for a user to create or import a recipe at all — every recipe in this app is a hand-authored mock fixture. Before any of `FUTURES.md`'s own video/AI-import ambitions are relevant, the actual missing precursor is a plain manual "Create Recipe" form producing a real `RecipeDetail`-shaped object — genuinely mock-first buildable, not backend-blocked. Not built this session; flagged so it isn't mistaken for an intentional, permanent scope boundary the way, say, Message being excluded from `2do`'s own Content dispatch is.
+
+#### Ingredient Alternatives — the write-side, completed 🎯 built (Session 9)
+
+Substitution *browsing* (4.4/Session 3) always worked; two real gaps existed underneath it, both closed this session:
+
+- **The allergy guardrail (4.1) existed as a real, tested function — `filterSafeSubstitutions` — but was never actually called from any page.** A user could declare a peanut allergy during onboarding and still see, vote on, and choose a peanut-based substitution on `/recipes/[id]`, because nothing in the UI ever ran the loaded substitution list through the filter. Now wired in: `substitutionsFor(ingredientId)` (the recipe detail page's own helper) is the **one** place every visible substitution list passes through `filterSafeSubstitutions(subs, allergies)` before it reaches the swap picker, the vote buttons, *or* `recomputeMacros` — a filtered-out substitution can't be chosen, voted on, or silently affect the displayed macros either, since all three read through the same filtered list rather than three independent checks that could drift out of sync.
+- **A real, found-and-fixed bug in the guardrail's own default matcher, not shipped broken.** `filterSafeSubstitutions`'s original default `allergenNameMatch` was a whole-string substring check (`name.includes(allergy)`). This looks reasonable in English but is a real safety gap in Polish: a user types "orzechy" (the natural plural a Polish speaker would enter), and it simply never appears as a substring inside "Mleko orzechowe" or "orzech laskowy" — different grammatical forms of the same word, so the naive check silently let the unsafe substitution through. Caught by this module's own standalone verification script (not discovered later, or by luck): `defaultAllergenNameMatch` (`lib/utils/substitution.ts`) now compares **word stems** (the first ~5 letters of the allergy word against the start of each word in the substitution name) instead of whole-string substrings — "orzechy"/"orzechowe"/"orzech" all share the stem "orzec" and correctly match, while a short, unrelated word ("soczewica" vs. "sojowe") doesn't false-positive. Still an honest heuristic, not real allergen tagging (see this function's own header comment) — deliberately erring toward over-filtering (hiding a possibly-safe swap) rather than under-filtering (showing a genuinely unsafe one), the correct direction to err in for a safety guardrail specifically.
+- **`SubstitutionComposer.svelte`** — the missing write-side. Same collapsed-toggle-reveals-a-form shape as `CommentComposer`: a name field and a quantity-multiplier (`ratio`) field, nothing else. Deliberately **never asks for `deltaMacros`** — a community member proposing "use 4 cloves instead of 2" has no reliable way to know the precise macro impact, and `applySubstitution` already treats an absent `deltaMacros` as a zero delta, so a community submission simply doesn't claim a macro change; only curated `source: 'system'` substitutions bother calculating one. Session-only, same `sessionSubstitutions` pattern every other write-side feature in this app uses — merged with the fixture-loaded list at render time via `substitutionsFor`, never mutating the loaded recipe.
+- **`recomputeMacros` gained an `extraSubstitutions` parameter.** Without it, a substitution proposed and immediately chosen in the same session would be un-findable by the macro recompute (which only ever searched `ingredient.substitutions`) — the ingredient list would visibly show the swap as chosen, but the macro totals at the top of the page would silently ignore it. Now `recomputeMacros(recipe, chosenSubstitutions, extraSubstitutions)` searches both lists.
+- **A real UI gap fixed along the way**: the swap `<details>` disclosure and the propose-a-substitution composer used to only render when `ingredient.substitutable && ingredient.substitutions?.length` — meaning an ingredient marked substitutable but starting with *zero* substitutions (a totally reasonable state for a brand-new ingredient) had no way to ever get its first community substitution proposed. Fixed to gate on `ingredient.substitutable` alone.
+- **Fixture demo**: `overnightOats`'s "Mleko" ingredient (`i7`) gained a real, well-reacted community substitution, "Mleko orzechowe (orzech laskowy)" — the exact case the stem-matching fix above exists to catch. Visible with no allergy declared; correctly disappears from the swap list, the vote buttons, and the macro recompute the moment a profile declares an "orzechy" allergy during onboarding.
+
+### 4.3 Cooking Mode 🎯 P1 (core) / 🧩 P2 (voice, ingredient sub-grouping, hybrid inline instructions, robust background timers)
+
+Fullscreen, one-step-at-a-time, huge font, tap-anywhere-to-advance, Wake Lock on mount. Built this session as a real component using the browser's native `WakeLock` API (with a documented Capacitor-plugin fallback path for P2, since Wake Lock browser support is inconsistent across WebViews — see 7). A `Step.durationMinutes` renders as a tappable chip that starts an in-page timer with an audio alert; **push notifications for a backgrounded timer are 🧩 P2** (needs Capacitor Local Notifications — a web `setTimeout` timer dies the moment the OS suspends a backgrounded tab/WebView, so P1's timer is honestly only reliable while the screen stays on, which Wake Lock happens to guarantee).
+
+**Session 9 — equipment-aware, not just duration-aware.** `CookingMode.svelte` now reads `profileStore.profile?.hardware` and, for whichever step is currently on screen, auto-substitutes the single best-fitting `StepAlternative` (via `pickUsableAlternative`, 4.9) in place of the base technique the moment `stepNeedsAlternative` is true — no browsing, no picking, since mid-cook is not the moment to compare options the way the recipe detail page's own browse list is for. An explicit "Show original step" escape hatch (`showOriginalInstead`, reset every time the step changes so a choice never silently carries into the next step) lets the cook override the auto-pick. If equipment is missing and *no* usable alternative exists at all, a warning badge names exactly what's missing (`missingEquipmentLabel`) rather than silently showing a step the cook can't actually follow.
+
+**New candidates from the Session 7 research pass (`FUTURES.md` Section 3), both genuinely mock-first buildable, neither built yet:**
+- **Hybrid inline instructions** — the single most-requested in-cooking UX fix in the source research (scrolling between a separate "Ingredients" list and "Instructions" text while hands are covered in flour is the #1 named complaint). Rather than re-parsing `Step.text` for numbers, the cleaner shape ties directly into data already on `Ingredient`: step text would reference real ingredient fields (quantity/unit) and `CookingMode.svelte` would interpolate + bold them at render time — meaning the amounts shown in a step are *always* consistent with the ingredient list, by construction. **This would also fix a real, currently-live inconsistency**: choosing a substitution on the recipe detail page (`chosenSubstitutions`) already updates the ingredients list and macros, but `CookingMode.svelte`'s own step text never reflects it — a cook who swapped in lentils still reads "Add mięso mielone" mid-recipe. Building inline instructions this way would resolve both at once.
+- **Ingredient sub-grouping** (`Ingredient.group?: string`, e.g. "for the sauce" vs. "for the marinade") — a trivial addition, rendered as sub-headings during mise en place.
+
+Voice commands ("Foodia, dalej") and the "rescue protocol" menu (przesolone/przypalone quick-fixes) are 🔮 P3 — see 7's notes on wake-word detection cost/reliability before committing to this. **Worth weighing more seriously than a pure convenience feature once native platforms exist**: the Session 7 research frames voice-driven cooking navigation as a real accessibility gap, not just a nice-to-have — a "Read my recipe" dictation mode has direct value for cooks with visual or motor impairments, an underserved need today (`FUTURES.md` Section 3).
+
+### 4.4 Micro-Cooperation & Comments 🎯 built (Session 3) / 🧩 P2 (moderation, "recognized" graduation)
+
+`NodeComment` (Section 3) is the real mechanism — reuses the exact "attach to a specific node, not the whole document" idea `2do` already validated for its own Comment/Content system, just scoped to `Ingredient`/`Step` instead of arbitrary Content types. **Built this session:** `CommentComposer.svelte` (collapsed-by-default add form, public/private toggle, per ingredient/step), `CommentItem.svelte` (renders one comment, public ones get `ReactionButtons`), and `ReactionButtons.svelte` (the shared upvote/downvote widget — `lib/utils/reaction.ts`'s `applyReactionOverride` recomputes fresh from the untouched base `ReactionSummary` plus a component-local optimistic override every time, same discipline `2do`'s `ReactionModule` documents, never chaining overrides or mutating the base). Session-only, same honesty as everything else in this mock-era build — nothing persists past a reload; see `routes/recipes/[id]/+page.svelte`'s `sessionComments`. Substitutions now use the same `ReactionButtons` for their own votes, restructured out of the old "whole row is one button" markup so choosing a swap and voting on it are two independent controls, not one overloaded click target.
+
+**Deliberately not built:** voting on a *private* note (meaningless — it's only ever visible to its author, `CommentItem.svelte`'s own guard); live re-sorting of substitutions as votes come in (`sortSubstitutionsByReaction` still only sorts once, from the untouched base data, at render time — re-sorting live would make rows jump under the viewer's cursor mid-click, a deliberate UX call, not an oversight); and community-sourced substitutions graduating into a "recognized" alternative once they cross a reaction threshold, which is the same "Spawn & Link" idea `2do`'s own Session 30 built for comments becoming Content — worth reusing that exact pattern once this is built, not reinventing it. Moderation (a bad-actor report vs. a quality note) is still `2do`'s Report/Problem split, not yet reused here — see Section 7 item 7.
+
+### 4.5 Smart Pantry & E-Grocery 🎯 P1 (local pantry) + P2 aggregation/export — both built / 🧩 P2 (dedup, real e-grocery API partnership)
+
+P1: a local, client-only `PantryItem[]` checklist (Section 3). **P2's aggregation, built Session 5:** `/shopping-list` cross-references the current week's `MealPlan` against the Pantry via `lib/utils/shoppingList.ts`'s `aggregateIngredients`/`crossReferencePantry` — same (name, unit) compound-key grouping discipline as the rest of this app's honesty culture: two recipes both needing "Czosnek" in the same unit sum correctly, but a pantry match in a *different* unit (e.g. needs `ml`, pantry has `l`) is never silently subtracted — it's shown at full needed quantity with a `partiallyCoveredDifferentUnit` flag instead, since unit conversion is ingredient-density-dependent (Section 7 item 3, still unsolved). A "Kupione → dodaj do spiżarni" button per missing item closes the loop by calling `pantryStore.add()` directly.
+
+**Export:** exactly the brain-dump's own "architecturally ready, MVP can be simple" framing — `lib/utils/shoppingExport.ts`'s `copyToClipboard` (with a visible `<textarea readonly>` fallback for browsers/contexts where the Clipboard API isn't available) plus `exportToEGrocery`, the named integration point: today it's an honest stub that does the same clipboard copy and says so, returning a semantic result code the caller translates via `t()` (`'copied' | 'failed'` / `'stub-copied' | 'stub-failed'`, refactored Session 6 for the interface-language work — every call site already expects that shape, so swapping in a real Glovo/Frisco POST later touches only this one function's body).
+
+⚠️ **A real, small gap surfaced by the Session 7 research pass (`FUTURES.md` Section 1), independently confirming Foodia's own already-shipped aggregation logic is sound while flagging a genuine bug next to it:** `pantryStore.add()` (`lib/state/pantry.svelte.ts`) always appends a new `PantryItem`, even when one with the same `(ingredientName, unit)` already exists — logging "Sól, 200g" twice produces two 200g rows instead of one 400g row, exactly the "phantom duplicate stock" failure mode the source research names as a top user complaint across competing apps. Not fixed this session (a documentation pass, not an implementation one) — a real, low-complexity next fix, closer to a bug than a feature.
+
+**Two P2 candidates from the same research pass, not yet built:** SKU-mapping for e-grocery (mapping an aggregated fractional need like "1.5 cups sour cream" onto real purchasable package sizes, not just a raw text line — genuinely needed once `exportToEGrocery` becomes a real integration, itself density/unit-conversion-adjacent work per Section 7 item 3) and auto-deduction (marking a planned meal "cooked" should subtract its ingredients from the Pantry automatically — `MealSlot` has no "cooked" state at all today). Both fully speced, including a proposed clamp-at-zero behavior for the "pantry would go negative" edge case, in `FUTURES.md` Section 1.
+
+### 4.6 Internationalization & Content Translation 🎯 built (Session 6)
+
+Two deliberately separate axes — same split `2do`'s own CLAUDE.md documents for the identical reason: a small, curated, developer-maintained set of **interface** strings vs. an unbounded, community-submitted set of **content** translations for user-generated recipe text. Conflating them would mean either forcing every recipe's translations through a fixed message catalog (nonsensical for user-generated data) or forcing UI chrome through a per-recipe translation workflow (overkill for "Dodaj"/"Add"). This section covers both halves, built together in one session since the content-translation UI's own "which language is the viewer currently in" question is answered directly by the interface layer.
+
+#### Interface language (PL/EN)
+
+No Paraglide/inlang dependency — a small, hand-rolled system, appropriately scoped for two languages and a few dozen keys (`2do`'s own compiler-based i18n tooling is real overkill at this size; revisit if the string count or locale count grows a lot).
+
+- **`lib/i18n/messages.ts`** — flat, dot-namespaced keys (`'nav.plan'`, `'plan.slot.breakfast'`, ...), one `pl` object and one `en` object; `en` is checked against `pl`'s own key set via `satisfies Record<keyof typeof pl, string>`, so a missing English string is a **build-time type error**, not a silently-broken fallback discovered in production.
+- **`lib/i18n/plural.ts`** — real CLDR-shaped pluralization: Polish genuinely has three cardinal forms (1; 2–4 excluding the 12–14 teens; everything else), English only two. `lib/i18n/t.ts`'s `tPlural(baseKey, n)` selects `.one`/`.few`/`.other` accordingly, falling back to `.other` for English's own `.few` entries (which are just a copy of `.other`, kept explicit rather than omitted so a missing-key fallback never masks a real typo elsewhere).
+- **`lib/i18n/t.ts`**'s `t(key, vars?)` reads `uiLocaleStore.locale` (a rune getter) on every call — the same "plain function reads a reactive getter, reactivity flows through whatever calls it" pattern `2do` documents for its own `canViewingAs()`. Called directly inside template expressions or `$derived` (both tracked contexts), so the whole UI re-renders instantly on a language switch with zero extra wiring at each call site. Script-level arrays that carry translated labels (onboarding's `DIET_OPTIONS`/`GOAL_OPTIONS`/`HARDWARE_OPTIONS`, `/plan`'s `SLOT_LABEL`) had to become `$derived`, not a plain `const` — a `const` built once at component creation would go stale the instant the language changes.
+- **SSR-correct locale resolution** — `hooks.server.ts` resolves the locale once per request (a `foodia-locale` cookie first, then the `Accept-Language` header, then the app's own default) and writes it into `event.locals.locale`; the root `+layout.server.ts` threads it into page data; `+layout.svelte` seeds `uiLocaleStore` from it in a plain top-level (not `$effect`-gated) statement, so the very first paint — server and client alike — already agrees on the right language, no flash. `app.html`'s `<html lang="%lang%">` placeholder is filled in by `hooks.server.ts`'s own `transformPageChunk`, the standard documented SvelteKit pattern for a dynamic `lang` attribute.
+- **`LanguageSwitcher.svelte`** — mounted in **both** the navbar and the footer (a new `AppFooter.svelte`, which didn't exist before this session), as asked. Switching writes `uiLocaleStore` directly (instant, no reload, no server round-trip) and persists the choice via a cookie (`lib/utils/cookies.ts`, the same `document.cookie` SSR-guarded helper shape `2do`'s own `cookies.ts` establishes) so the *next* fresh page load starts server-rendered in the right language too.
+- **Coverage**: every route (`/`, `/plan`, `/pantry`, `/onboarding`, `/shopping-list`, `/recipes/[id]`, the cooking-mode overlay) and every shared component (`CommentComposer`, `RecipeCard`'s hardware-match badge) migrated — verified by curling both `Accept-Language: en` and the default (no cookie) path against every route and grepping for the expected strings in each language, not just spot-checked.
+- **One real correctness fix made along the way, not just a translation pass**: `lib/utils/shoppingExport.ts`'s `copyToClipboard`/`exportToEGrocery` used to return hardcoded Polish status strings directly. Refactored to return semantic result codes (`'copied' | 'failed'`, `'stub-copied' | 'stub-failed'`) instead — the presentation layer (`/shopping-list`) is what turns a code into text via `t()`, since the interface's own language can change at any moment and business logic shouldn't be baking in a display string.
+- **Left open, deliberately smaller in scope than a real Settings-driven locale system:** no `/settings` page, no separate ranked content-language preference list — the content-translation resolver below reads the *current interface locale* directly as a single-entry hierarchy, not a multi-locale ranked preference the way `2do`'s own system has. A reasonable, smaller scope for this app's current size; worth revisiting if a real multi-locale audience emerges. See Section 7.
+
+#### Community content translation (recipes)
+
+The three explicit asks — a "view in original language" button, submitting alternatives/improvements to an *existing* translation, and proposing changes to the *original* content itself — turn out to be **one mechanism**, not three. A `Translation` (2's own type listing above) always names a `locale`; when that `locale` happens to equal the recipe's own `sourceLocale`, the submission is a same-language revision suggestion rather than a foreign-language translation — same shape, same submit form, same competing-votes resolution, distinguished only by a computed `isSameLocaleSuggestion` flag. This is a deliberate reuse, not a missing second feature — stated explicitly in `lib/utils/translations.ts`'s own header comment so a future session doesn't "fix" it by building a second, parallel suggestion system.
+
+- **`lib/utils/translations.ts`** — pure, framework-agnostic functions (no Svelte import), same discipline `substitution.ts`/`hardware.ts`/`week.ts` already follow:
+  - `getRecipeVersions(recipe, extra?)` — every selectable version: the true original, plus one entry per distinct locale with at least one `Translation` (competing submissions for the same locale collapse to the single highest-net-reaction one, ties broken by newest — same "the picker lists versions, not every competing row" simplification `2do`'s own multi-locale picker documents).
+  - `resolveRecipeVersion(recipe, hierarchy, versionKey?, extra?)` — what to actually render. An explicit `versionKey` (a picker choice) wins outright, **including** a same-locale suggestion — the *only* way one is ever shown. Without an explicit pick, walks `hierarchy` (today always `[uiLocaleStore.locale]`): a locale equal to the recipe's own `sourceLocale` **always** resolves to the true original, full stop — a same-locale suggestion is never auto-substituted for what the author actually wrote, regardless of its reaction score. This was verified with a real, deliberately-adversarial fixture (see below), not just asserted in a comment.
+- **`SuggestTranslationModal.svelte`** — one form for both cases. Locale picker (`COMMON_CONTENT_LOCALES`: pl/en/de/fr/es/uk, plus a free-text "other" option — a recipe can be translated into a language the *interface* doesn't support yet, a deliberately wider vocabulary than `UiLocale`). Textareas are pre-filled from the **best already-submitted text for the chosen locale** (so improving an existing translation starts from what's actually there, not from blind original-language text the submitter may not even read) — but the submitted `fields` are diffed against the **raw original**, not the prefilled text. This distinction is load-bearing, not pedantic: a `Translation` is a complete, independent candidate that fully replaces the original's fields wherever present, so a one-field tweak to an already-translated recipe must still carry every other field that was previously translated, or it would silently regress them back to the original the moment this new submission out-votes the old one.
+- **`TranslationBadge.svelte`** — reuses this app's existing `<details>`-based dropdown idiom (already used twice — the ingredient swap list, the shopping list's "show as text") rather than introducing a new popover component. Shows a "View Original" button whenever *not* currently viewing the original, plus a version-picker `<details>` whenever more than one alternative exists.
+- **A real bug caught during design, not shipped**: the recipe detail page's own "View Original" click handler originally converted the picker's `'original'` key to `versionKey = null` before passing it to the resolver — which seemed equivalent, but isn't: with `null`, the resolver falls through to its normal hierarchy walk, which (if the interface is in English and a good English translation exists) immediately re-resolves back to that translation, silently undoing the click. Fixed by passing `'original'` straight through so the resolver's own explicit-key branch (which always returns the true original for that key) actually runs. Caught by a standalone logic-verification script exercising this exact scenario before it ever reached the browser, not discovered by accident.
+- **`recipesById.r1` (Spaghetti Bolognese)** carries the real showcase fixture: `tr1`, a well-reacted English translation covering all three fields; `tr2`, a **same-locale, net-negative-reaction** suggestion — deliberately unpopular, to prove the resolver's own "never auto-applied regardless of reactions" rule actually holds, not just for a hypothetical positive case.
+- **Scope, stated plainly**: only `name`/`summary`/`description` are translatable (matches `2do`'s own exact `TranslatableField` scope) — ingredient names and step text are **not** translatable in this pass. Viewing a recipe in a translated language still shows the ingredients list and steps in the original Polish. A known, flagged gap, not an oversight — see Section 7.
+
+### 4.7 Search, Filtering & Categorization 🧩 P2, not built — speced Session 7 from real research findings
+
+Foodia has **no search or filter UI at all today** — the home feed applies only the hardware hard-filter (`ownsRequiredEquipment`, 4.1). But `RecipeCard.tags`/`dietFlags` already exist as real fields (Section 3) and are already *rendered* on `RecipeCard.svelte` — they're just never *filterable*. Of every idea surfaced by the Session 7 research pass (a 47-Reddit-thread competitive analysis of Paprika, MyFitnessPal, Mealime, Yazio, Cronometer, and Samsung Food — see `FUTURES.md` for the full deep-dive), this is the single most "pull-forward-able": the data model is already there, only the UI and the correct filtering logic are missing.
+
+**The specific, named failure mode this must avoid, taken directly from the source research (Paprika named specifically):** multi-tag filtering that silently applies logical **OR** where the user expects **AND**. A cook filtering by "Vietnamese cuisine" *and* "salads," expecting the intersection (only Vietnamese salads), instead gets flooded with every Vietnamese dish (heavy Pho soups included) *plus* every salad in the whole corpus (Greek, Italian, everything) — the union. This makes tag filtering functionally useless the moment a collection passes a few hundred recipes, and is explicitly named as one of the most common, specific engineering complaints across the source Reddit threads.
+
+**The spec, matching `2do`'s own already-proven `SearchFiltersSidebar` pattern rather than inventing a new one:**
+- Tag/`dietFlag` multi-select, **AND (intersection) by default** — get this right from day one, since the whole point of the finding above is that OR-by-default is the #1 named failure, not a minor tuning knob.
+- An explicit AND/OR toggle per facet group (same pattern `2do`'s `SearchFiltersSidebar` already implements) — gives power users the OR option deliberately, not by accident.
+- Exclusion support: a second multi-select for "avoid these tags" — functionally an exclusion operator (`-tomatoes`), but as a real UI control rather than a query-string mini-language, matching `2do`'s own deliberate "no Power Query parsing" restraint for its analogous P1 search build.
+- Deliberately **not** in this pass: micronutrient-level filtering (added vs. natural sugars, specific allergen combinations beyond tag exclusion) — that needs `MacroSummary` to carry a real nutritional breakdown, which itself needs a real nutrition database, an already-open, unaddressed gap (Section 3). This report sharpens *why* that gap matters (diabetics tracking glycemic impact, not just an abstract accuracy concern) without changing the fact that it's still blocked on the same precursor. See `FUTURES.md` Section 5 for the full finding.
+
+### 4.8 User Accounts 🎯 built (Session 8) — answers Section 7 item 21's own ❓
+
+A real, mock-first login/register/logout system — the precursor `FUTURES.md` Section 7 flagged as unlocking most of the report's family/social-planning material (swipe-to-decide, shared plans). **Deliberately not a hard gate on the rest of the app**, unlike `2do`'s own `AuthGuard`, which protects every route except a small allowlist. This app's User Context Engine (4.1) has never blocked its front door on a form — Progressive Profiling is a stated P1 principle, not a stub — and login shouldn't become the first exception. Authenticating is purely additive: onboarding, Pantry, planning, comments, and translations all keep working exactly as before for an anonymous visitor, untouched by this session.
+
+- **`lib/api/mock/auth.mock.ts`** — `AUTH_ACCOUNTS`, reusing the exact same `piotr`/`ania` identities already authoring recipes and comments throughout the app (now exported from `recipes.mock.ts`) rather than inventing a second, disconnected pair of people — same "reuse existing fixtures" discipline `2do`'s own `auth.mock.ts` establishes. A live, mutable array; `register()` pushes onto it, session-only (resets on a hard reload — plain module state, not persisted itself), same honest limitation `2do`'s own analogous store carries.
+- **`lib/state/auth.svelte.ts`** — this app's 5th `.svelte.ts` rune store. Cookie-based persistence **from the start**, not localStorage — `2do`'s own Session 34 already paid the cost of discovering the hard way that `sessionStorage`/`localStorage` is tab-scoped, not origin-scoped (a real "log in, open a new tab, appear logged out" bug); applying that lesson proactively here rather than independently rediscovering it, reusing this app's own `lib/utils/cookies.ts` (already built for the Session 6 language switcher). Purely client-side, same reasoning as `2do`'s `AuthGuard` (no real backend to validate a token against) plus a reason specific to this app: the Capacitor build prerenders every page at build time, so nothing auth-shaped could safely live in a server load here regardless.
+- **One deliberate, considered difference from `2do`'s own analogous form**: `recoverPassword` never reveals whether an email is registered — always the same generic "if an account exists…" response. `2do` deliberately chose the other way (revealing, for a demonstrable distinguishable error path, explicitly flagged there as a mock-era simplification, not a recommendation). This app just does the more correct thing directly, since account-enumeration prevention costs nothing extra to implement properly.
+- **`currentUserRef()`** (`profile.svelte.ts`) now prefers a real authenticated account when one exists, falling back to the pre-Session-8 onboarding-profile-based identity otherwise — the one call site `CLAUDE.md` had already flagged (before this session) as "the one call site that'll need to change the moment real accounts exist."
+- **`lib/components/auth/`** — `AuthPageShell.svelte` (shared card chrome), `LoginForm.svelte` (honors `?redirectTo=`, open-redirect-safe — only accepts a relative in-app path), `RegisterForm.svelte` (native HTML5 validation plus the one real cross-field check native attributes can't express, password confirmation, matching `2do`'s own exact precedent for this), `PasswordResetForm.svelte` (request-only, no token-confirmation follow-up screen exists, same honest scope `2do`'s own analogous form has), `UserAvatarMenu.svelte` (mounted in the navbar next to `LanguageSwitcher`; unauthenticated shows two plain links, authenticated shows a `<details>`-based dropdown — this app's own existing disclosure idiom, already used by `TranslationBadge`/the ingredient swap list/the shopping list's "show as text," reused again here rather than introducing a new popover component).
+- Routes: `/login`, `/register`, `/password-reset`, all real, all i18n'd from the start (24 new dictionary keys, `auth.*`). `/login` specifically needed `export const prerender = false` (a new `+page.ts`) — it reads `page.url.searchParams` for `?redirectTo=`, the exact same restriction `/plan`/`/shopping-list` already hit in Session 6, caught and fixed proactively this time rather than rediscovered via a failed build.
+- **Verified**: a standalone 8-assertion logic script exercising `login`/`register` against the real `AUTH_ACCOUNTS` shape (correct credentials, case-insensitive email, wrong password, unknown email, successful registration with displayName trimming, duplicate-email rejection, a freshly-registered account logging back in, and the account list growing by exactly one) — all 8 passed. `npm run check` clean; all 10 routes (existing + 3 new) return 200 in both languages; **both build targets re-verified end-to-end**, including the Capacitor static build specifically (the highest-risk target, given the fresh `page.url.searchParams` usage) — `build-capacitor/login` correctly has no prerendered file of its own (relies on the `200.html` SPA fallback, exactly as `/plan`/`/shopping-list` already do), while `register.html`/`password-reset.html` are real, correctly prerendered pages.
+
+**Left open, stated plainly:** Profile/Pantry/MealPlan remain singleton-per-browser, **not** re-keyed per account — logging in doesn't yet make your pantry "yours" across devices, since there's still no backend to sync against. That rewiring is a real, natural next step once any of `FUTURES.md` Section 7's actual family-sharing features get built, not done preemptively here. `AUTH_ACCOUNTS` is also, honestly, not a real credential store — passwords are plaintext mock data, exactly as flagged.
+
+### 4.9 Device/Equipment Alternatives 🎯 built (Session 9) — resolves 4.1's own long-flagged "temporarily disable broken equipment" gap
+
+New module, not in the original brain-dump by this name — the step-level mirror of Ingredient Alternatives (4.2), built to close a gap 4.1 has flagged since the very first pass of this document: a recipe's `requiredEquipment` (Card-level) is a hard, whole-recipe filter that hides a recipe outright if the cook doesn't own an airfryer, but nothing existed for the much more common real case — a recipe the cook mostly *can* make, where just **one step** assumes equipment they don't have. "My oven works fine, I just don't own an airfryer" shouldn't make an entire recipe invisible; it should surface an alternate technique for the one step that actually needs it.
+
+**Session 9 shipped this alongside `RecipeCard.requiredEquipment`'s own whole-recipe filter, deliberately not reconciled with it yet — Session 10 closed that gap, see the "Reconciled with the home feed/plan filter" note below.** The two systems still operate at genuinely different altitudes conceptually (the Card-level filter decides whether a recipe shows up in the home feed/`/plan` picker at all; `StepAlternative` operates *within* a recipe a viewer has already chosen to open), but they're no longer independent — the feed-level decision now genuinely accounts for step-level alternatives.
+
+**Reconciled with the home feed/`/plan` filter — 🎯 built (Session 10), see Section 7 item 26.** `lib/utils/cookability.ts`'s `isRecipeCookable(recipe, hardware)` is what the home feed and `/plan`'s picker actually filter by now, not the raw flat `requiredEquipment` list: a recipe stays visible if every step either needs nothing the viewer lacks, or has at least one usable `StepAlternative` — `airfryerFries` is no longer hidden outright for a viewer with an oven (or with neither, since its stovetop-pan alternative needs nothing). Equipment named at the recipe level but not attributable to any specific step (`overnightOats`'s own `kitchenScale`, which no step declares needing) has no alternative-technique path to check against by definition, so it correctly stays exactly as hard a block as it always was — the fix only loosens the filter where a real alternative genuinely exists, never blanket-loosens it. Both `routes/+page.server.ts` and `routes/plan/+page.server.ts` switched from the thin `mockApiClient.list()` (Card-only) to a new `listDetails()` (full `RecipeDetail[]`, since the reconciliation needs each recipe's own `steps`/`alternatives`, which a bare Card doesn't carry) — `RecipeDetail extends RecipeCard`, so every downstream consumer (`RecipeCard.svelte`, the picker) kept working unchanged.
+
+```typescript
+// lib/types/recipe.ts — the step-level mirror of Substitution's shape (Section 3)
+export interface StepAlternative {
+  id: string;
+  forStepId: string;
+  text: string;
+  requiresEquipment?: string[]; // absent/empty = a stovetop/hand technique, needs nothing special
+  durationMinutes?: number;     // an alternate technique may take a different amount of time
+  reactions?: ReactionSummary;
+  source: 'system' | 'community';
+  proposedBy?: UserRef;
+}
+```
+
+`Step` gained `alternatives?: StepAlternative[]`; `NodeType` widened to include `'step_alternative'` for architectural symmetry with the (already-present, if not yet targeted by any real comment) `'substitution'` member — cheap consistency, not a claim that comments target one yet.
+
+- **`lib/utils/stepAlternative.ts`** — pure, framework-agnostic (mirrors `substitution.ts`'s own discipline): `stepNeedsAlternative(step, hardware)` (the `ownsRequiredEquipment` hard filter, reused verbatim from 4.1 rather than reinventing it), `sortAlternativesByReaction` (identical net-score sort `sortSubstitutionsByReaction` already uses), `pickUsableAlternative(alts, hardware)` (the highest-reacted alternative among ones the viewer can *actually* cook, including alternatives needing no special equipment at all — Cooking Mode's own auto-pick, see 4.3), and `missingEquipmentLabel` (the "which equipment, named" half of a warning badge — the missing-equipment mirror of `hardware.ts`'s existing "matching equipment" `equipmentMatchLabel`, reusing the same translated `hardware.*` noun-form dictionary keys rather than a second copy).
+- **`StepAlternativeComposer.svelte`** — the propose form, same collapsed-toggle shape as `SubstitutionComposer`/`CommentComposer`: a text field (the technique itself), a set of equipment checkboxes reusing the onboarding wizard's own translated `onboarding.hardware.*` labels (so "what equipment does this need instead" asks the exact same question in the exact same words the onboarding form already taught the user), and an optional duration field.
+- **Recipe detail page (`/recipes/[id]`)** — every step now: shows an equipment-mismatch warning badge (naming exactly what's missing, via `missingEquipmentLabel`) when the base technique needs equipment the viewer hasn't declared; a browse-all `<details>` list of every alternative (fixture-loaded plus this session's own proposals via `alternativesFor(stepId)`), sorted by reaction, each with vote buttons and a "no special equipment" label when an alternative needs none — deliberately showing **every** alternative regardless of fit, the same "browse everything, let the viewer decide" call Ingredient Alternatives already makes, since deciding what you can actually use is the point of browsing here, before you start cooking; and the propose composer.
+- **Cooking Mode** — see 4.3's own updated entry: auto-suggests the single best-fitting alternative rather than a browse list, with an explicit toggle back to the original.
+- **Resolved, Session 11 (Section 7 item 27) — a step alternative proposed on the recipe detail page now DOES appear in Cooking Mode during the same visit.** Originally this was a stated, honest scope boundary: `/recipes/[id]` and `/recipes/[id]/cook` are two separate page loads, and `sessionStepAlternatives` used to be page-local `$state`, reset on every mount. Fixed by moving it into `lib/state/stepAlternatives.svelte.ts` — this app's 6th `.svelte.ts` rune store, keyed by recipe id, kept alive for the whole browser tab rather than reset per page — so both routes read/write the same underlying data. `CookingMode.svelte`'s own `pickUsableAlternative` call now merges `currentStep.alternatives` (fixture) with `sessionStepAlternativesStore.forRecipe(recipe.id)` (session-proposed), so a technique proposed moments earlier on the detail page is immediately eligible to be auto-suggested. Deliberately still session-only (no localStorage/cookie persistence) — this only widens "session" from "one page's lifetime" to "one tab's lifetime," it doesn't change the underlying "nothing survives a hard reload" honesty every other mock-era write-side feature in this app already carries. Ingredient substitutions were **not** given the same treatment — see Section 7 item 27's own updated note on why.
+- **Fixture demo**: `airfryerFries`'s step `st9` (the airfryer-only step) gained two real alternatives — a well-reacted `system` oven technique (`requiresEquipment: ['oven']`) and a less-popular `community` stovetop-pan technique (needing nothing special at all). A viewer with no declared airfryer or oven still sees a usable step (the pan technique) rather than a dead end; a viewer with an oven but no airfryer gets the oven technique auto-picked in Cooking Mode.
+- **Verified**: a standalone logic-verification script (13 assertions, shared with 4.2's own Ingredient Alternatives fixes — both modules were verified together, same session) covering `stepNeedsAlternative`/`pickUsableAlternative` against every hardware-ownership combination (no profile at all, has the required gear, missing it with one usable alternative, missing it with zero usable alternatives, and reaction-based tie-breaking among multiple usable ones) — all passed. `npm run check` clean (0 errors; the two new equipment-badge `<div>` elements carry the same, already-accepted `a11y_no_noninteractive_element_interactions` warning class this file's own pre-existing timer `<div role="timer">` already has, not a new category of warning). Both build targets (default SSR + `build:capacitor`) rebuilt clean; the Capacitor static output was grepped directly to confirm the new fixture text and UI strings are present in the prerendered `r2.html`/`r3.html`, not just asserted to be there.
+
+---
+
+## 5. Mocking strategy (same shape as `2do`'s Section 5.1)
+
+```typescript
+// lib/api/client.ts
+export interface RecipeApiClient {
+  getCard(id: string): Promise<RecipeCard>;
+  getDetail(id: string): Promise<RecipeDetail>;
+  list(filters?: Record<string, unknown>): Promise<RecipeCard[]>;
+}
+```
+
+`mockApiClient` reads from `lib/api/mock/*.mock.ts` fixtures shaped exactly like `RecipeCard`/`RecipeDetail`. `httpApiClient` implements the same interface once Django exists. Components only ever import `RecipeApiClient`, never a concrete implementation — the swap is a one-line change at the composition root, same payoff `2do` banked on this for.
+
+---
+
+## 6. Phase 2/3 — designed, not built (brainstorm captured, not lost)
+
+**See also `FUTURES.md`** (new, Session 7) — a companion document, not folded into this section, for a much larger, externally-grounded research deep-dive (47 real Reddit threads analyzing Paprika, MyFitnessPal, Mealime, Yazio, Cronometer, and Samsung Food) covering reverse meal planning & zero-waste, recipe import from video/social platforms, an AI recipe-adapter distinct from 6.2's Meal Planning Wizard, family/social planning (swipe-to-decide, live sync — both genuinely blocked on accounts Foodia doesn't have scoped yet), and trust/data-sovereignty business-model findings relevant to 8B's own open monetization question. The report's smaller, low-complexity findings were folded directly into 4.2/4.3/4.5/4.7 instead of duplicated there — `FUTURES.md` says explicitly where that happened.
+
+### 6.1 Capacitor & offline 🎯 web-shell built (Session 6) / 🧩 P2 (native platforms + real plugins)
+
+**What Session 6 built:** the web side of the Capacitor wrap — a second, static build target from the exact same SvelteKit codebase, with no fork and no duplicated pages.
+
+- **`svelte.config.js`** picks the adapter based on `process.env.BUILD_TARGET`: the default (`npm run build`) keeps `@sveltejs/adapter-auto` and a real Node/edge deployment with SSR — load-bearing, since `hooks.server.ts`'s per-request cookie/Accept-Language locale detection (4.6) only works with an actual server behind it. `BUILD_TARGET=capacitor npm run build:capacitor` (via a new `cross-env`-wrapped script) switches to `@sveltejs/adapter-static`, producing a fully static, prerendered bundle Capacitor can embed in a native WebView, which has no server at runtime, full stop.
+- **Prerendering is conditional too** (`routes/+layout.server.ts`'s `export const prerender = process.env.BUILD_TARGET === 'capacitor'`, cascading to every route) — safe and actually *correct* here, not a workaround: this app's mock API is deterministic and never varies per-request (all real per-user state — Profile/Pantry/MealPlan — lives client-side in `localStorage`, never touched by any server load), so baking the HTML once at build time produces the exact same output a real request would.
+- **`/plan` and `/shopping-list` are explicitly excluded** from prerendering (`export const prerender = false` in each route's own new `+page.ts`) — both read `page.url.searchParams` (the optional `?week=` cross-link between the two pages), which SvelteKit correctly refuses to prerender: a query string has no meaning for a page baked once, forever. No loss — neither route has a server load anyway (fully store/`localStorage`-driven), so `adapter-static`'s `fallback: '200.html'` SPA mode serves them exactly as it already would for any client-only route.
+- **Two real, build-breaking bugs found and fixed during this session's own first build attempt, not left broken:** (1) `static/favicon.png` never actually existed on disk — the dev/SSR build never noticed (a missing asset just 404s silently in a browser), but the Capacitor build's `strict: true` prerender crawl validates every linked asset and fails the whole build on a missing one. Fixed with a real, valid PNG (a solid `$accent`-colored placeholder, not a designed icon — flagged as exactly that). (2) The SPA fallback was originally named `index.html`, which collided with the real prerendered home page — `adapter-static` writes the fallback *last*, silently overwriting the actual home page's own HTML with generic SPA boilerplate. Renamed to `200.html` (the same convention Netlify's own SPA fallback uses); verified afterward that `build-capacitor/index.html` contains the real, rendered home page content, not the fallback shell.
+- **`capacitor.config.ts`** — `webDir: 'build-capacitor'`, `androidScheme: 'https'` (both the Clipboard API, already used by `shoppingExport.ts`, and the Wake Lock API, already used by `CookingMode.svelte`, refuse to run under a plain `http` WebView origin).
+- **The locale-on-cold-start gap, and its fix**: a prerendered page's initial `data.locale` is baked at *build* time against a synthetic request with no real cookie or Accept-Language header, so it always resolves to the app's bare default (`'pl'`) — there's no way around this without a server. `routes/+layout.svelte` gained a small client-only `$effect` that reads the real `foodia-locale` cookie the moment the app actually mounts and corrects the store if it disagrees — a one-tick flash at worst, the same class of acceptable tradeoff already documented for Profile/Pantry's own lazy hydration. Written generally enough to double as a harmless defensive safety net on the regular SSR build too, not Capacitor-only special-cased code.
+- **Verified**, not just configured: `BUILD_TARGET=capacitor npm run build:capacitor` succeeds end-to-end; `build-capacitor/index.html`/`onboarding.html`/`pantry.html`/`recipes/r1.html`/`r2.html`/`r3.html` all exist as real prerendered pages (the three recipe ids sourced from `recipesById` itself via a new `entries()` export, not hand-copied — a new fixture recipe is automatically included); `plan`/`shopping-list` correctly have no prerendered `.html` of their own, relying on `200.html` instead. The default `npm run build`/`npm run dev` paths were re-verified unaffected afterward — 0 new type errors, all routes still 200, locale detection still works exactly as before.
+- **`.gitignore` added** (didn't exist before this session) — `build/`, `build-capacitor/`, `.svelte-kit/`, and `android/`/`ios/` (the native platform projects `npx cap add` would generate — regenerable via `npm run cap:sync`, never hand-edited source, so never worth committing even once they exist).
+
+**Deliberately NOT done, and why:** `npx cap add android`/`npx cap add ios` were not run. Both commands scaffold a real, substantial native project tree (an actual Android Studio / Xcode project) that this sandboxed environment has no SDK to build or verify against — generating an unverified multi-file native project would be low-value, unfalsifiable work, the same "don't fake what can't be verified" discipline this whole document already holds itself to. **To finish the native wrap on a machine that has the SDKs:**
+1. `npm run build:capacitor` (produces `build-capacitor/`).
+2. `npx cap add android` / `npx cap add ios` — generates the native project shells, reading `capacitor.config.ts`.
+3. `npm run cap:sync` (already wired: rebuilds the web bundle, then `npx cap sync` copies it into both native shells and updates native dependencies).
+4. Real native plugins from here — none are wired yet, since there was no platform to test them against: `@capacitor/camera` (Pantry barcode scanning), `@capacitor/local-notifications` (backgrounded cooking timers — `CookingMode.svelte`'s existing web `setInterval` timer already flagged in Section 7/4.3 as only reliable foregrounded), a native Wake Lock fallback (the existing code already checks `wakeLockSupported` and degrades gracefully without one, so nothing breaks in the meantime), and `@capacitor/preferences` or SQLite as a more durable native replacement for the `localStorage`-based Profile/Pantry/MealPlan stores this app already has.
+5. App icon/splash screen generation (`@capacitor/assets`) — needs the native project folders from step 2 to exist first, genuinely can't be done before that.
+
+Offline sync (SQLite + reconcile-on-reconnect) remains unbuilt exactly as originally scoped — nothing changed there this session; there's still nothing to sync *against* until a real backend exists.
+
+### 6.2 AI Meal Planning Wizard 🔮 P3 (the real, LLM-driven wizard) — 🎯 P1.5 manual planner built (Session 4)
+
+Budget + time + context constraints in, a week's calendar out, with "Lock & Reroll" per-day regeneration that preserves the week's overall budget/calorie envelope. **The real wizard** still needs a real backend + LLM call — nothing to mock meaningfully client-side beyond a static "here's a plausible week" fixture, unchanged from the original assessment.
+
+**What Session 4 built instead, deliberately not confused with the real thing:** `/plan`, a manual weekly planner — a 7-day × 4-slot (`breakfast`/`lunch`/`dinner`/`snack`) grid over the real `MealPlan`/`MealPlanDay`/`MealSlot` types from Section 3 (not a parallel "draft" shape to reconcile later), a per-week budget field with a running-total "Budget Reality Check" banner when the assigned meals exceed it, and a "🎲 Szybko zapełnij tydzień" (quick-fill) button — a plain, deterministic round-robin over the hardware-filtered recipe corpus that stops rather than overshoot the budget. **The UI says outright, in its own copy, that this is not AI** ("nie prawdziwa sztuczna inteligencja... czeka na backend") — the honest budget-reality-check *behavior* the real wizard's spec calls for was worth borrowing early since it's just arithmetic, but the *button* must never be mistaken for the LLM-driven one. When the real backend exists, swapping the quick-fill's body for an API call is the whole migration — the surrounding grid/budget UI doesn't change.
+
+`Lock & Reroll` (regenerating one day while preserving the week's envelope) genuinely needs the real optimizer — quick-fill's own round-robin has no such preservation logic, and wasn't built to fake having one.
+
+### 6.3 D3 Relationship Graphs 🔮 P3
+
+Three distinct graphs, reusing `2do`'s own D3-integration discipline (D3 computes layout only, Svelte owns every DOM node, SSR-safe circular fallback refined client-side): the **Substitution Graph** (an ingredient at the center, alternatives orbiting, edge thickness = fit), the **Meal-Prep Map** (one batch-cooked base radiating into a week's worth of 10-minute derivative meals), and the **Recipe Evolution Tree** (original → community forks). All three are the same `RecipeRelationship` edge type (Section 3) rendered differently — one data shape, three view components, matching `2do`'s own "don't invent a second mechanism for the same shape" discipline.
+
+### 6.4 Creator Economy & Community
+
+Tips (Apple Pay/Google Pay one-tap "postaw kawę"), royalty split (a community member's substitution earning a cut of a viral recipe's revenue), "Plemiona" (tag-based community hubs, same idea `2do`'s own Tag/Skill hubs already prove out), shareable presets with deep-linking (`foodia.net/c/[id]?preset=[id]`), "Cook Along" live presence avatars. Every one of these needs real payment/ledger infrastructure and its own legal review before being anything more than a UI mockup — see 7 and 8B.
+
+### 6.5 Globalization & live translation 🔮 P3 (the AI-powered premium layer) — 🎯 the manual foundation is built, see 4.6
+
+**Distinct from Session 6's work, on purpose — read this section as "what's still P3," not as duplicating 4.6.** Session 6 built the real, non-AI, manual foundation: a working interface-language switcher and a community-submitted (human-written, vote-ranked) content-translation system for recipe `name`/`summary`/`description`. What's described here and still entirely unbuilt: **AI-translated community *threads*** (`NodeComment` content, not recipe fields — a comment thread in a foreign language, machine-translated on demand) and **AI-driven unit conversion localized to the viewer's kitchen** (cups → grams, adjusted for the specific ingredient's density — the same unsolved gap Section 7 item 3 already flags, here proposed to be solved via a model rather than a hand-built density table). Both still need a translation-provider decision (cost per call at scale) and a real backend before scoping further — nothing client-mockable here the way the manual system was.
+
+### 6.6 Neighbor pantry-sharing 🔮 P3
+
+Proximity-based "your neighbor has spare radishes" — real privacy/safety design needed before this goes further than a brainstorm bullet (coarse geofencing, opt-in only, never exact addresses — see 7).
+
+---
+
+## 7. Issues for brainstorm (not blocking current work, worth a pass before P2/P3)
+
+1. **Nutrition data has no real source yet.** `MacroSummary` on every mock fixture is hand-authored. Before any macro/calorie number is shown as fact (not a mock placeholder), we need a licensed nutrition database (USDA-style, or a Polish equivalent) — this is a real accuracy/liability question the moment users start trusting the numbers for health goals.
+2. **Allergy safety must be a hard filter, not an AI suggestion the model is merely asked to respect.** ✅ **Built and wired in, Session 9** — `filterSafeSubstitutions` (4.2) is now the one function every visible substitution list, vote button, and macro recompute reads through. Its own default matcher was found and fixed mid-session (whole-string substring matching silently missed Polish declension — "orzechy" typed by a user never appears verbatim inside "orzechowe"); now a word-stem comparison, still an honest heuristic pending real per-substitution allergen tags, not a claim of full linguistic correctness. Flagging again here, not removing the item outright, because "the guardrail exists and is wired in" is a different claim than "the guardrail is bulletproof" — a stem-prefix match can still, in principle, both over- and under-match on a name/allergy pair this session's fixtures didn't happen to exercise.
+3. **Unit conversion (cups → grams) is ingredient-density-dependent**, not a fixed ratio — a cup of flour and a cup of honey convert completely differently. Needs a real per-ingredient density table, not a generic conversion constant.
+4. **Royalty split / tips / affiliate commissions all move real money.** That's a payments ledger, tax-invoice generation for creators, and very likely a marketplace-facilitator legal structure (who's the merchant of record?) — a much bigger lift than the UI suggests. Worth scoping as its own mini-project before any "creator economy" feature ships, not bolted on late.
+5. **Neighbor pantry-sharing is a privacy/safety surface, not just a nice feature.** Needs opt-in, coarse (not exact) location, and abuse-prevention thinking (a stranger showing up because your app revealed your building) before it's anything but a brainstorm bullet.
+6. **Offline sync conflicts.** If Pantry is edited on two devices while offline, whose write wins on reconnect? Needs a real strategy (last-write-wins with a visible conflict banner is the cheap default; true CRDT-style merging is probably overkill for a pantry checklist).
+7. **Community-submitted substitutions need moderation**, same problem `2do` already solved with its Report/Problem split (a bad-actor report vs. a quality issue) — reuse that pattern rather than inventing a new one when this gets built.
+8. **D3 graphs need a depth/size cap**, same lesson `2do`'s own comment-thread flattening already learned — a viral recipe with hundreds of community substitutions will make an unreadable graph without one.
+9. **Wake Lock browser support is inconsistent across WebViews**, especially on some Android OEM skins — P1 ships on the web API alone; P2's Capacitor wrapping should include a native fallback plugin rather than assuming the web API alone is enough once this is a "real" app people rely on mid-recipe.
+10. **Voice commands and wake-word detection are a much bigger lift than one bullet point suggests** — kitchen background noise, multi-accent Polish, and battery cost of always-listening mode all need their own feasibility pass before committing to this for P3.
+11. **Backgrounded timers need native local notifications**, not a web `setTimeout` — a web timer dies the moment iOS suspends a backgrounded tab. Flagged in 4.3, repeated here since it's easy to quietly ship a P1 timer that "works" only because the phone never left the foreground during testing.
+12. **New (Session 2) — the hardware hard-filter can't run server-side yet, because the profile it filters by is `localStorage`-only.** `routes/+page.server.ts` still fetches and SSRs the *full*, unfiltered recipe list every time; the filter is a client-side `$derived` that only takes effect once `profile.svelte.ts` hydrates post-mount. Harmless today (Progressive Profiling's own default is "unfiltered," so a slow connection just briefly shows the honest Neutral state, not a bug), but worth revisiting once there's a real session/backend — at that point the filter belongs in the server load, not a client-side derived array, both for correctness and so a slow client doesn't have to download recipes it's about to hide.
+13. **New (Session 2) — `localStorage` has no cross-device sync, at all.** A profile set on one phone doesn't exist on a tablet, or after clearing site data. This is exactly the gap Section 6.1's future offline/sync layer (SQLite + reconcile-on-reconnect) is meant to eventually close, but P1 has zero sync story today — not even the "last-write-wins" fallback item 6 describes for Pantry, since there's nothing to reconcile *against* yet, only one local copy. Flag before anyone assumes a P1 profile or pantry list survives a device switch.
+14. **New (Session 2) — revisiting `/onboarding` after a profile exists pre-fills the wizard, doubling as an "edit profile" screen.** This was a judgment call, not explicitly speced in the brain-dump (which only ever describes onboarding as a first-run flow). Reasonable for now since it's the only profile-editing surface that exists, but worth an explicit decision once a real Settings/Account page is built — should editing hardware/diet stay inside the onboarding wizard's own step flow, or move to a flatter single-page settings form once there's more to edit (sub-profiles, etc.)?
+15. **New (Session 6) — the content-translation hierarchy is a single-entry list (`[uiLocaleStore.locale]`), not a real ranked preference.** `2do`'s own equivalent system lets a viewer rank several preferred languages ("prefer Polish, then German, then fall back to whatever exists"); this app just uses whatever the interface is currently set to. A deliberate, smaller scope for now (no Settings page exists to host a ranked-list editor yet either) — worth building out together if a real multi-locale audience emerges, not two separate follow-ups.
+16. **New (Session 6) — only `name`/`summary`/`description` are translatable; ingredient names and step text are not.** Viewing a recipe via a translation still shows the full ingredients list and every step in the original Polish. Matches `2do`'s own exact scope for its analogous system, so not an accidental corner cut, but worth stating plainly since it's the single biggest practical gap in the feature as shipped — a translated recipe today is genuinely only "translated" for its header, not the parts someone's actually cooking from.
+17. **New (Session 6) — the interface's default-locale detection (cookie → Accept-Language → `'pl'`) has no real analytics behind the choice of `'pl'` as the final fallback**, just CLAUDE.md 8B's own "Polish market-first" assumption, itself still marked as not fully decided. Both languages now ship symmetrically (real switcher, no gating), which makes this a lower-stakes decision than it would've been pre-Session-6, but the literal fallback order is still an assumption, not a measured one.
+18. **New (Session 6) — the Capacitor static build bakes in the interface locale at build time** (`'pl'`, since there's no real request during prerendering to read a cookie/Accept-Language from), corrected client-side within a tick by a cookie-resync effect once the app actually mounts — see 6.1's own note. A real, if minor, first-paint flash inside the native app specifically (the web SSR path doesn't have this issue at all), not something worth engineering further around until it's shown to matter on a real device.
+19. **New (Session 6) — native Capacitor platforms were never scaffolded**, deliberately: `npx cap add android`/`ios` need real SDKs (Android Studio/Xcode) this environment doesn't have to build or verify against. The static web bundle they'd consume is built and verified; the actual native project trees, and every plugin listed in 6.1's own "to finish the native wrap" steps (camera, local notifications, native Wake Lock, durable native storage), are still just a documented next step, not started code.
+20. **New (Session 6) — `favicon.png` didn't exist anywhere in this repo until this session**, and had gone unnoticed since Session 1 because a missing static asset just silently 404s in a normal browser/SSR build — only the Capacitor build's stricter prerender-time asset validation caught it. Worth a reminder that `strict: true` prerendering is a real correctness net worth keeping even once native platforms exist, not just a one-time build-unblocking step.
+21. ~~**New (Session 7) — ❓ does Foodia's roadmap need a real multi-user accounts/auth system scoped at some point?**~~ **Answered, Session 8**: yes — a real, mock-first login/register/logout system now exists (4.8). Deliberately *not* a hard gate on the rest of the app, unlike `2do`'s own `AuthGuard` — see 4.8's own reasoning. This unblocks the *precursor* `FUTURES.md` Section 7 named, not the family/swipe/live-sync features themselves, which still need real multi-device sync (a backend) to mean anything — one account logging in on two different browsers today still sees two unrelated, unsynced local datasets. `FUTURES.md` Section 7 updated accordingly.
+22. **New (Session 7) — `Foodia` has no data-export mechanism at all**, beyond the shopping list's own plain-text copy. A "download my data" button (client-side `JSON.stringify` over the existing `localStorage`-backed Profile/Pantry/MealPlan stores, no backend required) would be a genuinely cheap, high-trust feature directly responsive to the real user-trust research in `FUTURES.md` Section 8 (the RecipeBox story — a company's unilateral pricing change caused permanent loss of years of users' archived recipes) — flagged as a real, low-cost candidate, not built this session (a documentation pass, not an implementation one).
+23. **New (Session 7) — the Session 6 build log's own `exportToEGrocery` description had gone stale** (still described the pre-refactor `Promise<{ success, note }>` return shape after Session 6 itself changed it to semantic result codes) — caught and fixed in 4.5 while researching the pantry-dedup finding above, not left as a drifted doc/code mismatch.
+24. **New (Session 8) — Profile/Pantry/MealPlan stay singleton-per-browser even after logging in**, not re-keyed per account (4.8's own "Left open" note). Logging in as the same account on two different devices today shows two unrelated, unsynced local datasets — there's still no backend to sync against, so this is honest, not an oversight, but worth remembering the moment any real cross-device feature gets scoped: the account system alone doesn't deliver that, only the precursor for it.
+25. **New (Session 8) — `AUTH_ACCOUNTS` is genuinely not a credential store**, same honesty every other "mock API" in this app already carries — passwords are plaintext, there's no hashing, no real session token, just a cookie holding a bare user id. Fine for a mock-only app with no real data at stake; would need a complete rebuild the moment a real backend exists, not a incremental hardening of what's here.
+26. ~~**New (Session 9) — the recipe-level `requiredEquipment` hard filter (4.1) and the new step-level `StepAlternative` system (4.9) are deliberately unreconciled.**~~ **Resolved, Session 10** — see the new `lib/utils/cookability.ts` (4.1/4.9's own updated notes). A recipe missing an airfryer for one step no longer gets hidden from the home feed / `/plan` picker when that step has a usable alternative — `isRecipeCookable` checks per-step, falling back to the flat `requiredEquipment` check only for equipment that isn't attributable to any specific step (e.g. `overnightOats`'s `kitchenScale`, which correctly stays a hard block since there's no alternative-technique path to reconcile it against).
+27. ~~**New (Session 9) — a step alternative (or ingredient substitution) proposed on `/recipes/[id]` doesn't carry over to `/recipes/[id]/cook` during the same visit**~~ **Resolved for step alternatives, Session 11** — see `lib/state/stepAlternatives.svelte.ts` (4.9's own updated note). A technique proposed on the detail page is now genuinely visible, and auto-suggestable, in Cooking Mode for the same recipe during the same tab session, no reload needed. **Ingredient substitutions deliberately weren't moved to the same treatment** — Cooking Mode doesn't render ingredients at all yet (the still-unbuilt "hybrid inline instructions" idea, 4.3), so there's nothing there for a session-proposed substitution to feed into today; worth doing the identical fix the moment that feature exists, not before.
+
+---
+
+## 8. Open questions
+
+### A. My working assumptions (stated, not asked — redirect anytime)
+
+- Mock-first frontend, no real Django backend wired up yet (Section 1).
+- Phasing order in Section 2 — Recipe Graph + Cooking Mode first, since they're the actual differentiators; onboarding/pantry are minimal stubs in P1, not full builds.
+- Single frontend repo. Capacitor's *web shell* was pulled forward and built in Session 6 (see 6.1) once the app had enough real pages to be worth wrapping — the native platform scaffolding itself (`npx cap add android/ios`) is still deferred, this time for a concrete reason (no SDK in this environment), not a scheduling choice.
+- P1's onboarding profile and Pantry checklist persist to `localStorage` only (`lib/state/*.svelte.ts`, `lib/utils/storage.ts`) — no session, no cross-device sync, single browser only. Flagged honestly as a real limitation in Section 7 item 13, not presented as real sync.
+- The interface ships **both** Polish and English symmetrically (Session 6, 4.6) rather than picking one as primary — this makes 8B's own still-open "which language is primary" question lower-stakes than originally framed, though the literal fallback-locale order (cookie → Accept-Language → `'pl'`) is still just an assumption, not a decision (Section 7 item 17).
+
+### B. ❓ Needs your call, not decided here
+
+- **Monetization sequencing** — which lever ships first once P2 starts: e-grocery affiliate, subscription (AI planning/translation), or tips/royalties? This affects what backend infrastructure (payments, ledger) gets prioritized, so worth deciding before P2 planning, not blocking P1. **New data point (Session 7, `FUTURES.md` Section 8):** real, community-sourced research names subscription-model fatigue and "Enshittification" (features paywalled after building a loyal free userbase) as a genuine, actively-discussed source of user distrust in this exact product category — a real signal *against* leading with a subscription, worth weighing alongside whatever else informs this decision, not treated as the deciding factor on its own.
+- **Is there an existing Django project this should eventually point at**, or is backend work fully greenfield too? Changes nothing about P1, but matters for how soon `httpApiClient` (Section 5) becomes real.
+- ~~**Primary UI language for the interface itself**~~ — **Largely resolved by Session 6** (4.6): the interface now ships both Polish and English as real, symmetric, switchable options (navbar + footer switcher), not one primary with a secondary bolted on, and mock recipe content is genuinely Polish-authored with a real English translation available (not a placeholder split anymore). What's still technically an assumption, not a decision: the exact fallback order when neither a cookie nor a clear `Accept-Language` signal exists (`'pl'` wins — Section 7 item 17) — low-stakes now that both languages are first-class, but flagged rather than silently finalized.
+
+---
+
+## 9. Build log
+
+### Session 1
+
+- Scaffolded the SvelteKit project (Section 1's stack) with the Section 3 type contracts, mock fixtures for 3 recipes, a home feed (`RecipeCard` grid), a recipe detail page (ingredients/steps/substitutions), and a working Cooking Mode component (fullscreen, Wake Lock, tap-to-advance, inline timers). See `src/` — this is the literal implementation of Modules 2 and 4.2/4.3 above, everything else in this document is design only.
+
+### Session 2 — the two remaining P1 stubs from Section 2/8A: onboarding + Pantry
+
+- **Fixed a pre-existing tooling break before anything else**: `vite.config.ts` imported `sveltekit` from `@sveltejs/vite-plugin-svelte`, which no longer exports it at the installed version (`3.1.2`) — moved to `import { sveltekit } from '@sveltejs/kit/vite'`. `npm run check` now runs clean (0 errors; the 2 remaining warnings are pre-existing a11y notes on `CookingMode.svelte`'s timer `<div>`, untouched this session).
+- **`lib/utils/storage.ts`** — SSR-guarded, try/catch-wrapped `localStorage` JSON helpers, the shared primitive both new stores below build on.
+- **`lib/state/profile.svelte.ts` / `lib/state/pantry.svelte.ts`** — this app's first two `.svelte.ts` rune stores, same "object of getters + methods wrapping module-level `$state`" idiom `2do` already established for exactly this class of client-only persistence. Both are deliberately **lazy-hydrated** (`hydrate()`, called once from `routes/+layout.svelte`'s own `$effect`) rather than reading `localStorage` at module-load time — reading synchronously at module scope would make the client's very first render disagree with SSR's (always-empty) render the instant a returning visitor already has a saved profile/pantry, a real hydration mismatch. Because `$effect` never runs during SSR, both the server render and the client's pre-hydrate render agree on the empty state — and "no profile yet" IS the correct default anyway (Progressive Profiling, 4.1), not just a workaround.
+- **`routes/onboarding/+page.svelte`** — the User Context Engine's onboarding (4.1): a 3-step wizard (diet + allergies → goals → hardware), a "Pomiń na razie" skip link on every step (Progressive Profiling — skipping never blocks the front door), and — a judgment call, see Section 7 item 14 — pre-fills from the existing profile when revisited, doubling as the only "edit profile" surface that exists today.
+- **`routes/pantry/+page.svelte`** — the Smart Pantry's P1 slice (4.5/6.1): a local add/remove checklist, explicitly labeled in its own copy as not yet cross-referencing a MealPlan (that's P2 aggregation logic, not built).
+- **The hardware hard-filter, wired into the home feed exactly as 4.1 specifies** ("hide a recipe requiring an airfryer if none is declared") — `lib/utils/hardware.ts`'s `ownsRequiredEquipment`, applied as a client-side `$derived` filter in `routes/+page.svelte` (see Section 7 item 12 for why this can't run server-side yet). Also implements the onboarding sketch's own "AHA moment" idea: `equipmentMatchLabel` renders a "✓ Idealne do Twojego Airfryera"-style badge on `RecipeCard` whenever a recipe's required equipment is fully covered by the viewer's declared hardware.
+- **A dismissible-by-navigation onboarding nudge on the home feed** ("Nie ustawiłaś jeszcze swojej kuchni…") shown only once hydration confirms no profile exists — never during SSR, avoiding a flash for a visitor who actually does have one.
+- Verified end-to-end: `npm run check` clean, `npm run dev` smoke-tested — `/`, `/recipes/r1`, `/recipes/r1/cook`, `/onboarding`, `/pantry` all return 200, and the SSR'd homepage correctly shows zero hardware-match badges (proving the badge is genuinely post-hydration client state, not a lucky SSR coincidence).
+
+### Session 3 — Module 4's write-side: comments + voting (pulled forward from P2, see 4.4)
+
+- **`lib/utils/reaction.ts`** — `applyReactionOverride(base, override)`, the shared upvote/downvote math: always recomputed fresh from the untouched base `ReactionSummary` plus a local override, never chained on top of a previous computed display — the same discipline that keeps `2do`'s own `ReactionModule` from double-counting across repeated clicks.
+- **`lib/components/comments/`** — `ReactionButtons.svelte` (component-local optimistic override, `compact` variant for inline use), `CommentItem.svelte` (renders one `NodeComment`; only public ones get voting — a private note is only ever visible to its own author, so a vote on it would be meaningless), `CommentComposer.svelte` (collapsed-by-default add form, textarea + public/private checkbox).
+- **`profile.svelte.ts` gained `currentUserRef()`** — the one implicit "who's authoring this" identity in the app (no real auth system exists yet): reuses the onboarding profile's own id/displayName when one exists, falls back to a fixed `'anon-me'`/`'Ty'` otherwise. Flagged as the one call site that'll need to change the moment real accounts exist.
+- **`routes/recipes/[id]/+page.svelte` rewired**: `sessionComments` (session-only, reset per recipe via a small `$effect` keyed on `recipe.id`) merged with the fixture's own `comments`; a `CommentComposer` now sits under every ingredient's and every step's comment list; substitution rows split "choose this swap" and "vote on this swap" into two independent controls (previously one big button did both, an accidental overload from Session 1) — `sortSubstitutionsByReaction` still only sorts once at render time from the untouched base data, deliberately not live-resorting as votes come in (would make rows jump under the viewer's cursor mid-click).
+- Verified: `npm run check` clean (0 errors, same 2 pre-existing `CookingMode.svelte` a11y warnings, untouched); `npm run dev` smoke test confirmed `/recipes/r1` renders the comment composer toggle and real vote counts (e.g. the `s1` substitution's 12 upvotes) server-side, before any client JS runs.
+- Added Section 7 issues 12–14 in Session 2 already covered the localStorage/filtering caveats; no new brainstorm issues surfaced this session beyond what 4.4's own "deliberately not built" paragraph already states inline.
+
+### Session 4 — the manual meal-planning slice (P1.5, pulled forward from 6.2, honestly distinct from the real AI Wizard)
+
+- **`lib/types/pantry.ts`** gained `MealSlotKind` — the `MealSlot['slot']` literal union pulled out to a named export, since both the store and the page needed to reference it.
+- **`lib/utils/week.ts`** — bare ISO calendar-date math (`mondayOf`, `weekDates`, `weekdayLabel`, `addDays`, ...), deliberately parsing dates as local `Date(y, m, d)` rather than `new Date(isoString)` — the latter reads a date-only string as UTC midnight, a real off-by-one-day bug east of UTC. Directly reuses the same lesson `2do`'s own `calendar.ts`/`parseCalendarDate` already documents, rather than rediscovering it.
+- **`lib/state/mealPlan.svelte.ts`** — this app's third `.svelte.ts` rune store, same lazy-hydrate discipline as `profile`/`pantry`. Keyed by `weekStart`; `planFor(weekStart)` always returns a real (possibly empty) 7-day `MealPlan`, never `undefined` — a week nobody's touched yet is a legitimate empty state, not a loading one.
+- **`routes/plan/+page.svelte`** — the 7×4 grid (day × `breakfast`/`lunch`/`dinner`/`snack`), a recipe picker modal (hardware-filtered, same `ownsRequiredEquipment` the home feed already uses), a per-week budget field with a running-total "Budget Reality Check" banner, and the quick-fill button described in 6.2 above — explicit, deterministic round-robin, **not** AI, and labeled as such directly in the UI copy so nobody mistakes it for the real wizard once that exists.
+- **One real Svelte 5 warning caught and fixed, not silenced**: `budgetInput`'s `$state` initializer originally read `plan.budget?.amount` directly, which only captures a `$derived` value once at declaration time (`state_referenced_locally`). Fixed by initializing to `''` and letting the existing `$effect` (which already resets `budgetInput` on every `weekStart` change, including the initial mount) set the real value — cleaner than wrapping the read in `untrack()`, since the effect was already doing the correct computation regardless.
+- The picker's backdrop uses the same `role="button" tabindex="0" onkeydown` pattern `CookingMode.svelte`'s own full-screen tap target already established (Session 1) — matching precedent kept this addition warning-free rather than introducing a third pattern.
+- Verified: `npm run check` clean (0 errors, same 2 pre-existing `CookingMode.svelte` warnings, still untouched); `npm run dev` smoke test confirmed `/plan` returns 200, the Navbar link renders, and a fresh session's grid shows all 28 cells (4 slots × 7 days) as empty "+ Dodaj" buttons — the correct starting state before any assignment happens.
+- No new Section 7 brainstorm issues — the "not prorated by servings" simplification (Recipe has no `baseServings` field to scale cost against) and "not the real AI" distinction are both stated inline, in 6.2 and in the code's own comments, rather than duplicated into a numbered issue.
+
+### Session 5 — the E-Grocery aggregation (4.5), unblocked by Session 4's real `MealPlan`
+
+- **`lib/api/client.ts`/`mock/index.ts`** gained `getManyDetails(ids)` — full `RecipeDetail` (ingredients included) for a known set of ids, since the shopping list needs ingredient data that `RecipeCard`/`list()` doesn't carry. Deliberately shaped like a real backend endpoint would be (`GET /recipes?ids=...&detail=full`), not a mock-only convenience method — unknown ids are silently dropped, not errored.
+- **`lib/utils/shoppingList.ts`** — `aggregateIngredients`/`crossReferencePantry`, pure functions (no Svelte import). Grouped by a `(name, unit)` compound key: two recipes needing the same ingredient in the same unit sum correctly; a different unit never gets silently subtracted (Section 7 item 3's unit-conversion gap stays honestly unsolved, flagged per-item via `partiallyCoveredDifferentUnit` instead of pretending to convert). Deliberately not scaled by `MealSlot.servings`, same already-flagged simplification `/plan`'s own budget math uses, kept consistent rather than introducing a second, different guess.
+- **`lib/utils/shoppingExport.ts`** — `copyToClipboard` (SSR-guarded, fails soft to `false` rather than throwing) and `exportToEGrocery`, the integration point CLAUDE.md 4.5 names explicitly: today an honest stub that copies to clipboard and says so in its own returned message, shaped so a real Glovo/Frisco POST later only replaces this one function's body.
+- **`routes/shopping-list/+page.svelte`** — deliberately **no `+page.server.ts`**: the page's core data (the `MealPlan`) only exists in `localStorage`, so there's nothing a server load could usefully prefetch — same "plain `+page.svelte`, store-driven" precedent `2do`'s own store-backed routes already establish. Reads the target week from `?week=` (via `$app/state`'s `page`, this app's first use of it) so `/plan` and `/shopping-list` can link to the same week in both directions; `/plan` itself gained a matching `?week=` seed (read once via `untrack()` — the deliberate one-time-read convention, not a live URL sync) plus a "🛒 Lista zakupów" link carrying its current week forward. Two sections — "Do kupienia" (missing, each with a one-click "Kupione → dodaj do spiżarni") and "Masz już w spiżarni" (fully covered, shown for transparency, not just the shopping-relevant half) — plus the copy/export actions and a visible read-only text fallback.
+- **Verified beyond typechecking**: a standalone script exercising `aggregateIngredients`/`crossReferencePantry` directly against constructed fixture data (two recipes sharing an ingredient in the same unit; a pantry match in a *different* unit) confirmed the summation, the missing-quantity subtraction, and the different-unit flag all behave exactly as documented — not just "it compiles."
+- Verified end-to-end: `npm run check` clean (0 errors, same 2 pre-existing `CookingMode.svelte` warnings — one new `css_unused_selector` warning surfaced and was fixed by splitting a combined `.loading, .empty` selector, not left in); `npm run dev` smoke test confirmed `/shopping-list` (with and without `?week=`) returns 200, the SSR'd empty state renders correctly (no client-only `MealPlan` data exists at SSR time — same honest client/server split every other local-only store in this app already has), and both cross-navigation links render.
+- No new Section 7 brainstorm issues — the unit-mismatch and non-prorated-servings simplifications are both stated inline in 4.5/the code's own comments already, not duplicated into a numbered issue.
+
+### Session 6 — Interface localization + content translation (4.6) + the Capacitor web shell (6.1)
+
+The largest single session so far — three deliverables, built together since the content-translation UI's own "what language is the viewer in" question is answered directly by the interface layer built alongside it.
+
+**Interface i18n (PL/EN):**
+- New `lib/i18n/` module: `locales.ts` (`UiLocale`, `DEFAULT_UI_LOCALE`), `messages.ts` (a ~100-key `pl`/`en` dictionary, `en` checked against `pl`'s own keys via `satisfies`), `plural.ts` (real 3-form Polish CLDR pluralization vs. English's 2-form), `t.ts`/`tPlural` (reads `uiLocaleStore` reactively on every call), `localeNames.ts` (a wider curated list for content locales, separate from the interface's own `UiLocale`).
+- `hooks.server.ts` (new file — this app had none before) resolves the locale once per request (cookie → `Accept-Language` → default) and writes `event.locals.locale`; `app.d.ts` gained `Locals.locale`/`PageData.locale`; the root `+layout.server.ts` threads it through; `app.html`'s `<html lang="pl">` became `<html lang="%lang%">`, filled in by `hooks.server.ts`'s own `transformPageChunk`.
+- `lib/state/uiLocale.svelte.ts` — this app's 4th `.svelte.ts` rune store. `routes/+layout.svelte` seeds it from server data in a plain top-level statement (not `$effect`-gated, so SSR and the client's first render agree from paint one), and separately gained a client-only cookie-resync `$effect` (built for the Capacitor build's own benefit, see below, but harmless and genuinely useful on the SSR build too).
+- **`LanguageSwitcher.svelte`** (new) mounted in **both** the navbar and a brand-new **`AppFooter.svelte`** (this app had no footer at all before this session) — exactly as asked. Switching is instant (writes the store directly, no reload) and persists via a cookie (new `lib/utils/cookies.ts`) for the next fresh load.
+- Every route and shared component migrated: `+layout.svelte`, `/`, `/plan`, `/pantry`, `/onboarding`, `/shopping-list`, `/recipes/[id]`, `/recipes/[id]/cook`, `CookingMode.svelte`, `CommentComposer.svelte`, `RecipeCard.svelte`/`hardware.ts`'s equipment-match badge. Script-level option arrays that carry translated labels (onboarding's diet/goal/hardware lists, `/plan`'s slot labels, `week.ts`'s weekday abbreviations) had to become locale-aware/`$derived` rather than a plain `const`, or they'd have gone stale on a language switch.
+- `shoppingExport.ts` refactored to return semantic result codes (`'copied' | 'failed'`, `'stub-copied' | 'stub-failed'`) instead of hardcoded Polish strings — a real correctness fix, not just a translation pass, since business logic shouldn't bake in a display string the interface's own language can change at any moment.
+- Verified in both directions, not just spot-checked: curled every route with `Accept-Language: en` and with no header/cookie (default), grepping for the expected string in each language; confirmed `<html lang>` and the footer/navbar switcher both render correctly in each case.
+
+**Community content translation (recipes):**
+- `RecipeCard` gained `sourceLocale?`, `RecipeDetail` gained `translations?: Translation[]` (Detail-only — `toCard()` in `mock/index.ts` now also strips `translations`, keeping the real Card/Detail weight split honest); new `Translation`/`TranslatableField` types.
+- `lib/utils/translations.ts` — `getRecipeVersions`/`resolveRecipeVersion`. The three asks ("view original" button, submit alternatives to an *existing* translation, propose changes to the *original*) turned out to be one mechanism: a same-locale `Translation` is a revision suggestion, distinguished from a foreign translation only by a computed `isSameLocaleSuggestion` flag — stated explicitly as deliberate reuse in the file's own header comment, not a missing second feature.
+- **A real design bug caught before it reached the browser**: "View Original" originally converted the picker's `'original'` key to `versionKey = null`, which seemed equivalent but wasn't — with `null`, the resolver's normal hierarchy walk could immediately re-resolve back to an existing translation if the interface happened to be in that translation's language, silently undoing the click. Fixed by passing `'original'` straight through so the resolver's explicit-key branch (which always returns the true original) actually runs. Caught by a standalone 5-assertion logic script exercising this exact scenario (plus same-locale-suggestion resolution, cross-recipe hierarchy defaulting, and version-count correctness) against the real fixture data before any browser testing — all 5 passed.
+- `SuggestTranslationModal.svelte` — one form for both translating and improving-the-original; pre-fills from the *best already-submitted text* for the chosen locale (so improving an existing translation starts from readable text, not blind source-language text) but diffs the submission against the *raw original* (so a partial edit never silently regresses previously-translated fields the moment it out-votes an older submission). `TranslationBadge.svelte` reuses this app's existing `<details>` dropdown idiom rather than introducing a new popover component.
+- `recipesById.r1` gained a real showcase fixture: `tr1` (a well-reacted English translation, all three fields) and `tr2` (a deliberately **net-negative-reaction** same-locale suggestion, proving the resolver's "never auto-applied regardless of reactions" rule holds for an unpopular case, not just a hypothetical one).
+- Verified end-to-end: `npm run check` clean throughout; curled `/recipes/r1` with and without `Accept-Language: en` and confirmed the correct auto-resolution in each case, the "Shown in: ... Ania K." status line, the suggest button, and "Dostępne wersje (2)" all render server-side, before any client JS runs.
+
+**The Capacitor web shell** — see 6.1 for the full writeup; in brief, a second static build target (`svelte.config.js`'s conditional adapter, conditional prerendering cascaded from the root layout, `/plan`+`/shopping-list` explicitly excluded since they read `page.url.searchParams`), `capacitor.config.ts`, two real build-breaking bugs found and fixed (`favicon.png` never existed; the SPA fallback originally collided with and clobbered the real prerendered home page), a `.gitignore` (this app had none), and `BUILD_TARGET=capacitor npm run build:capacitor` verified to actually succeed and produce the correct static output — native platform scaffolding (`npx cap add`) explicitly not run, no SDK available in this environment to verify it against.
+
+Section 7 gained items 15–20 covering the honest scope cuts and open questions from all three deliverables (the single-entry content-language hierarchy, ingredient/step text staying untranslated, the Capacitor cold-start locale flash, native platforms being unscaffolded, and the `favicon.png` gap `strict` prerendering caught). Section 8's own "Primary UI language" open question is now marked largely resolved — both languages ship symmetrically, only the literal fallback order remains an unconfirmed assumption.
+
+### Session 7 — ingesting an external research report: `FUTURES.md` (new) + small extensions to existing modules
+
+A documentation-only session — no application code changed, `npm run check`/`build`/`build:capacitor` untouched from Session 6's own verified state. The founder brought in a 19-page competitive/user-research report (*"Nowe Funkcjonalności Portalu Żywieniowego"*, grounded in 47 real Reddit threads about Paprika, MyFitnessPal, Mealime, Yazio, Cronometer, and Samsung Food/Whisk) covering eight themes: Smart Pantry architecture, Reverse Meal Planning/Zero Waste, In-Cooking UX, video/social recipe import, search & categorization, an AI "recipe adapter," social/family planning, and platform-trust/business-model findings ("Enshittification").
+
+- **Read via the PDF tool in two page-range passes** (pages 1–10, 11–19 — the file's own page count of 19 exceeded the tool's effective single-request limit), fully translated and synthesized from Polish, not just skimmed for keywords.
+- **Split by complexity, per the founder's own explicit instruction, not dumped into one place:** four findings turned out to be small, low-complexity, natural extensions of modules Foodia already has, and were folded directly into `CLAUDE.md` — pantry deduplication + SKU-mapping/auto-deduction candidates (4.5), a foundational "there's no way to create a recipe at all" flag (4.2), hybrid inline instructions + ingredient sub-grouping (4.3, plus a real currently-live bug this surfaced — chosen substitutions never propagate into `CookingMode.svelte`'s own step text), and a brand-new Section 4.7 (Search, Filtering & Categorization) — the single most "pull-forward-able" finding in the whole report, since `RecipeCard.tags`/`dietFlags` already exist as real fields and are already rendered, just never filterable.
+- **Everything else went into a new `FUTURES.md`** — reverse meal planning/zero-waste cascading suggestions, recipe acquisition from video/social platforms (a genuinely new capability area, not an extension of anything), an AI recipe adapter kept deliberately distinct from 6.2's own Meal Planning Wizard (same "don't conflate two AI features sharing a rough shape" discipline Session 6 already established for content-vs-thread translation), social/family planning (swipe-to-decide, live sync — both honestly accounts-blocked), and the trust/data-sovereignty findings, cross-linked into 6's own intro and 8B's monetization question rather than duplicated there.
+- **One real, live bug found and fixed while researching, not left as drift**: 4.5's own description of `exportToEGrocery` still described its pre-Session-6 return shape (`Promise<{ success, note }>`) after Session 6 itself had already refactored it to semantic result codes — caught and corrected.
+- **A genuine confidence-building finding, stated explicitly rather than only citing gaps**: the report's own central "blind planning" critique (shopping lists computed by pure summation, ignoring real pantry state) is a problem Foodia's own Session 5 `crossReferencePantry` logic already solves correctly — real, external, independent validation that that design was right, not just an internal judgment call.
+- **A genuine tension surfaced, not resolved unilaterally**: the report's own community-sourced preference (perpetual-license/one-time payment, active distrust of subscriptions) is real evidence bearing on `CLAUDE.md` 8B's still-open monetization question — flagged as a data point for the founder's own eventual call, not treated as deciding it.
+- Section 7 gained items 21–23 (whether Foodia needs a real accounts system at all, given how much of the report's highest-value material depends on one existing — flagged ❓; a cheap "download my data" export as a real, low-cost trust feature; the stale `exportToEGrocery` doc/code mismatch this session's own research caught).
+
+### Session 8 — User Accounts (4.8), answering Section 7 item 21's own ❓ with "yes, build it"
+
+- **`recipes.mock.ts`'s `piotr`/`ania` exported** (were module-local `const`s) so `lib/api/mock/auth.mock.ts` could reuse the exact same two people as its own mock accounts, rather than inventing disconnected new ones.
+- **`lib/state/auth.svelte.ts`** — this app's 5th `.svelte.ts` rune store. Cookie-based persistence from the very first line of code, not localStorage-then-fixed — applying `2do`'s own hard-won Session 34 lesson (tab-scoped storage causes a real cross-tab auth-loss bug) proactively rather than independently rediscovering it, since this app's `lib/utils/cookies.ts` already existed (built for Session 6's language switcher) and needed zero changes to reuse here.
+- **Deliberately not a hard gate**, the one considered, explicit departure from `2do`'s own `AuthGuard` precedent this whole doc otherwise borrows from heavily: this app's User Context Engine (4.1) has treated Progressive Profiling as a stated P1 principle since before any of this session's work, and login joining that same "never block the front door" list is a direct, deliberate application of an existing house rule, not an oversight or a scope cut.
+- **`currentUserRef()`** (`profile.svelte.ts`) updated to prefer a real account when one exists — the exact call site flagged, before this session, as "the one call site that'll need to change the moment real accounts exist" (that flag now removed from the function's own comment, replaced with what actually changed).
+- Real login/register/password-reset pages + `UserAvatarMenu` in the navbar, all built i18n-first (24 new `auth.*` dictionary keys in both languages from the start, not retrofitted) — reflecting Session 6's now-established discipline that new UI ships translated, not added-then-translated-later.
+- **One build-breaking issue class caught and fixed proactively, not rediscovered**: `LoginForm`'s `?redirectTo=` support reads `page.url.searchParams`, the exact same pattern that broke the Capacitor prerender build for `/plan`/`/shopping-list` in Session 6. Recognized immediately from that precedent and fixed with the identical `export const prerender = false` pattern *before* ever running the build, not discovered by a failed build a second time.
+- **Verified**: a standalone 8-assertion logic script exercising the real `login`/`register` matching logic (case-insensitive email, wrong password, unknown email, displayName trimming, duplicate-email rejection, a freshly-registered account logging back in, exact account-count growth) — all 8 passed. `npm run check` clean; all 10 routes (7 existing + 3 new) return 200 in both languages. **Both build targets re-verified end-to-end** — the default build unaffected, and the Capacitor static build specifically (the highest-risk target given the fresh `searchParams` usage) confirmed correct: `build-capacitor/login` has no prerendered file of its own (relies on the `200.html` SPA fallback, exactly like `/plan`/`/shopping-list` already do), `register.html`/`password-reset.html` are real prerendered pages with correct content.
+- Section 7 gained items 24–25 (Profile/Pantry/MealPlan staying singleton-per-browser even after login, not yet re-keyed per account; `AUTH_ACCOUNTS` being honestly not a real credential store). Item 21 marked answered. `FUTURES.md` Section 7 updated to reflect the precursor now existing, while being explicit about what still doesn't follow from it alone (real cross-device sync needs a backend, not just an account).
+
+### Session 9 — Ingredient Alternatives completed (4.2) + Device/Equipment Alternatives built new (4.9)
+
+- **Ingredient Alternatives' write-side finished**: `filterSafeSubstitutions` (a real, tested function since it was first built, but never actually called from any page) is now wired into the one place every visible substitution list, vote button, and `recomputeMacros` call reads through (`substitutionsFor`, `routes/recipes/[id]/+page.svelte`) — a filtered-out substitution genuinely cannot be chosen, voted, or silently affect macros. `SubstitutionComposer.svelte` is the missing propose-a-substitution form (name + ratio, deliberately no `deltaMacros` — a lay proposer can't know the precise macro impact, and `applySubstitution` already treats an absent delta as zero). `recomputeMacros` gained an `extraSubstitutions` parameter so a freshly-proposed-and-immediately-chosen substitution actually affects the displayed macros instead of being silently unfindable. A real UI gap fixed along the way: the swap disclosure used to require a non-empty `substitutions` array to render at all, meaning a substitutable ingredient starting with zero substitutions had no way to ever get its first one proposed.
+- **A real, found-and-fixed safety bug in the allergy guardrail's own default matcher**, caught by this session's own standalone verification script before it ever reached a fixture or the browser: whole-string substring matching (`name.includes(allergy)`) silently missed Polish declension — a user typing "orzechy" never matches "orzechowe"/"orzech laskowy," different grammatical forms of the same word. `defaultAllergenNameMatch` (`lib/utils/substitution.ts`) now compares word stems (first ~5 letters) instead, verified to both catch the real declension case and not false-positive on an unrelated short word. Still an honest heuristic pending real per-substitution allergen tags, documented as such in the function's own header comment — see Section 7 item 2's own update.
+- **Device/Equipment Alternatives, new module (4.9)** — resolves 4.1's own long-standing "temporarily disable broken equipment... needs a real per-recipe re-derivation of alternate cooking methods" flag. `StepAlternative` (mirrors `Substitution`'s shape exactly), `Step.alternatives?`, `lib/utils/stepAlternative.ts` (`stepNeedsAlternative`/`sortAlternativesByReaction`/`pickUsableAlternative`/`missingEquipmentLabel`, reusing `ownsRequiredEquipment` from the existing hardware hard-filter rather than reinventing equipment-ownership logic), `StepAlternativeComposer.svelte` (propose form, reusing onboarding's own translated hardware checkbox labels). Recipe detail page gets a per-step equipment-mismatch warning badge, a browse-all-and-vote alternatives list, and the composer. Cooking Mode auto-suggests the single best-fitting alternative (via `pickUsableAlternative`) rather than presenting a browse list, with an explicit "show original step" toggle and a warning badge naming exactly what's missing when no alternative fits at all.
+- **Two deliberate, stated scope boundaries, not oversights**: the Card-level `requiredEquipment` recipe-hiding filter (4.1) and the new step-level system stay unreconciled — a recipe can still be hidden from the home feed over one step that actually has a perfectly usable alternative (Section 7 item 26, new). And a step alternative proposed on `/recipes/[id]` doesn't carry over into that same recipe's `/recipes/[id]/cook` during one visit, since the two routes are separate page loads with independently-scoped session state (Section 7 item 27, new) — the same honest limitation every other session-only feature in this app already carries.
+- 25 new dictionary keys added to both `pl`/`en` (`substitution.*`, `stepAlternative.*`), following the same `t()`-key-cast convention already established by `lib/utils/hardware.ts`'s own dynamic-key lookups.
+- Fixture demo data: `overnightOats`'s "Mleko" ingredient gained a real, well-reacted community peanut-milk substitution (the exact case the allergy stem-matching fix exists to catch); `airfryerFries`'s airfryer-only step gained a well-reacted system oven alternative and a less-popular community stovetop-pan alternative (needing no special equipment at all).
+- **Verified**: a standalone 13-assertion logic-equivalent script covering both modules together (allergy filtering including the Polish-declension fix and a false-positive guard, `recomputeMacros` seeing session-proposed substitutions, and `stepNeedsAlternative`/`pickUsableAlternative` across every hardware-ownership combination including reaction-based tie-breaking) — all 13 passed after the one real bug above was found and fixed. `npm run check`: 0 errors (the same, already-accepted class of `<div onclick>` a11y warning this file's own pre-existing timer element already carries, not a new warning category). Dev server smoke-tested (`/recipes/r2`, `/recipes/r3`, `/recipes/r3/cook` all 200, new fixture/UI strings confirmed present server-rendered). Both build targets rebuilt clean — the default SSR build and `build:capacitor`, the latter's prerendered static output directly grepped (not just assumed) to confirm the new content survives into `build-capacitor/recipes/r2.html`/`r3.html`.
+
+### Session 10 — reconciling the recipe-level equipment filter with the step-level one (Section 7 item 26)
+
+A contained follow-up to Session 9: the home feed and `/plan`'s recipe picker were still hiding a recipe outright over its flat, hand-authored `RecipeCard.requiredEquipment` list, completely blind to the step-level `StepAlternative` system Session 9 just built — a viewer without an airfryer still never saw `airfryerFries` at all, even though its one airfryer-only step has a perfectly usable oven (or even stovetop-pan) alternative.
+
+- **`lib/utils/cookability.ts`** (new) — `isRecipeCookable(recipe, hardware)`, the one function both the home feed and `/plan`'s picker now filter by. Deliberately **not** a blanket swap to step-only logic: equipment declared at the recipe level but not attributable to any specific step (`overnightOats`'s `kitchenScale` — no step in that fixture ever declared needing it) has no alternative-technique path to reconcile against by construction, so it stays exactly as hard a block as it always was. Only equipment a step actually names in its own `requiresEquipment` gets the richer, alternative-aware treatment — the union of every step's `requiresEquipment` is subtracted from the recipe-level list before the flat check runs on what's left. This is what correctly un-hides `airfryerFries` for an oven-owning (or equipment-less) viewer while leaving `overnightOats` correctly hidden without a kitchen scale — a real reconciliation, not a loosened filter that happens to pass every fixture.
+- **A real architectural dependency this surfaced, not worked around**: computing this requires each recipe's `steps`/`alternatives`, which the existing `RecipeCard` (what `list()`/the home feed/the picker all worked with before) deliberately doesn't carry — that's the whole point of the Card/Detail weight split (Section 5). Rather than bend the Card shape or duplicate step data onto it, both `routes/+page.server.ts` and `routes/plan/+page.server.ts` switched from `mockApiClient.list()` to a new `listDetails()` (full `RecipeDetail[]`, mirrors `list()`'s own shape, no `toCard()` stripping). Since `RecipeDetail extends RecipeCard`, this is a strict superset everywhere a `RecipeCard` was expected — `RecipeCard.svelte`, `ReactionButtons`, the picker's own rendering — none of it needed to change. Same honesty this app's mocking strategy (Section 5) already carries elsewhere: at this fixture count, "Card vs Detail bandwidth" is nominal, not a real cost, so loading full detail for the feed is a defensible, cheap way to get a correct filter rather than reinventing the aggregation at the Card layer.
+- **Also fixed a small, pre-existing duplication along the way**: the home feed and `/plan`'s picker each had their own independent copy of the same one-line `.filter(...)` call. Both now call the same shared `isRecipeCookable`, not two copies that could silently drift.
+- **Verified**: a standalone 12-assertion logic-equivalent script mirroring `isRecipeCookable` exactly against all three real fixture shapes (spaghetti trivially cookable; oats correctly still hard-blocked without a kitchen scale, correctly cookable with one; fries correctly cookable with the base airfryer, correctly *newly* cookable via the oven alternative, correctly still cookable via the no-equipment pan alternative even with neither, and correctly hidden again once that pan alternative is removed from the fixture; plus the bare-Card fallback path) — all 12 passed. `npm run check`: 0 errors, same pre-existing warning set, no new warnings. Dev server smoke-tested (`/` and `/plan` both 200, no new console/server errors). Both build targets rebuilt clean; the Capacitor static output's prerendered `index.html` directly grepped to confirm all three fixture recipe names still render (the SSR/prerendered path has no client profile, so it exercises the "no profile — unfiltered" branch, not the hardware-dependent one, which the standalone script covers instead).
+- Section 7 item 26 marked resolved (struck through, not deleted — same convention item 21 already established). 4.1's and 4.9's own prose updated to describe the reconciliation as built rather than a stated permanent scope boundary.
+
+### Session 11 — a step alternative proposed on the recipe page now survives into Cooking Mode (Section 7 item 27)
+
+A contained follow-up, same shape as Session 10's own: item 27 named the exact gap — `sessionStepAlternatives` was page-local `$state` on `/recipes/[id]/+page.svelte`, reset via an `$effect` every time the component mounted or the viewed recipe changed, so a technique a cook proposed while reading the recipe was already gone by the time they navigated into `/recipes/[id]/cook` for that same recipe two clicks later.
+
+- **`lib/state/stepAlternatives.svelte.ts`** (new) — this app's 6th `.svelte.ts` rune store, same "object of getters + methods wrapping module-level `$state`" idiom `profile`/`pantry`/`mealPlan`/`uiLocale`/`auth` already establish. `byRecipeId: Record<string, StepAlternative[]>`, with `forRecipe(recipeId)`/`propose(recipeId, alternative)`. Deliberately keyed by recipe id and simply never reset by either page — the fix *is* removing the reset, not relocating it. Deliberately still **not** persisted to localStorage/a cookie: this only widens "session" from "one page's lifetime" to "one browser tab's lifetime," it doesn't change the underlying "nothing survives a hard reload" honesty every other write-side feature in this app (`sessionComments`, `sessionSubstitutions`, `sessionTranslations`) already carries — those all stay page-local on purpose, since Section 7 item 27's own parenthetical about ingredient substitutions doesn't apply yet (see below).
+- **`routes/recipes/[id]/+page.svelte`** — `sessionStepAlternatives` and its slice of the reset `$effect` removed outright; `alternativesFor`/`proposeStepAlternative` now read/write through `sessionStepAlternativesStore` directly. `sessionSubstitutions`/`chosenSubstitutions`/`chosenStepAlternatives` are unchanged, still page-local — see the next bullet for why.
+- **`CookingMode.svelte`** — a new `currentStepAlternatives` derived value merges `currentStep.alternatives` (fixture) with `sessionStepAlternativesStore.forRecipe(recipe.id)` filtered to the current step, and `pickUsableAlternative` now reads that merged list instead of `currentStep.alternatives` alone. The "no alternatives exist at all" vs. "alternatives exist but none fit" warning-badge distinction was updated to check the same merged list too — otherwise a session-proposed-but-still-unusable alternative (needs equipment nobody in this scenario owns) would have been invisible to that check and shown the wrong message.
+- **Ingredient substitutions were deliberately NOT given the identical fix**, even though Section 7 item 27's own original wording named both. Cooking Mode doesn't render ingredients at all today (the still-unbuilt "hybrid inline instructions" idea flagged in 4.3) — there's nothing on that page for a session-proposed substitution to feed into yet, so moving `sessionSubstitutions` into a cross-route store now would add real complexity for zero visible behavior change. Flagged as the natural next half of this fix the moment hybrid inline instructions actually exist, not done preemptively.
+- **Verified**: a standalone 6-assertion logic-equivalent script mirroring both the store and its two consumers exactly, specifically exercising the literal scenario item 27 named — propose a microwave technique on the (simulated) detail page for `airfryerFries`'s airfryer-only step, then confirm the (simulated) Cooking Mode's own `pickUsableAlternative` now returns it for a microwave-owning cook who owns neither an airfryer nor an oven — plus a cross-recipe-leakage guard (a different recipe id must never see another recipe's proposals) and a multiple-proposals-accumulate check. All 6 passed. `npm run check`: 0 errors, same pre-existing warning set. Dev server smoke-tested (`/recipes/r3` and `/recipes/r3/cook` both 200, no new console/server errors — this app has no headless-browser tooling installed, so the actual cross-route `$state` persistence itself is proven by the standalone script mirroring the real store/consumer code exactly, not by a live browser click-through). Both build targets rebuilt clean; the Capacitor static output's prerendered `recipes/r3.html` directly grepped to confirm the propose-composer UI still renders (`recipes/r3/cook.html` has no equivalent text to grep for — Cooking Mode's own markup never repeats the "Alternatywne metody"/"Zaproponuj" strings, expected, not a gap).
+- Section 7 item 27 marked resolved-for-step-alternatives (struck through, scope-noted, not deleted). 4.9's own "deliberate scope boundary" prose updated to describe the fix.

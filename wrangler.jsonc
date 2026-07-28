@@ -1,0 +1,12 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	// "foodia" is the Pages project's internal name in Cloudflare's dashboard — cosmetic, doesn't
+	// need to match the eventual production domain, which is bound separately via a Custom Domain
+	// once the project exists. Same convention personali's own wrangler.jsonc already establishes.
+	"name": "foodia",
+	// pages_build_output_dir is what marks this as a Cloudflare Pages project (vs a plain Worker)
+	// and makes @sveltejs/adapter-cloudflare emit the Pages bundle (_worker.js + _routes.json) there.
+	"pages_build_output_dir": ".svelte-kit/cloudflare",
+	"compatibility_date": "2026-07-28",
+	"compatibility_flags": ["nodejs_compat"]
+}

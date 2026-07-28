@@ -1,0 +1,64 @@
+@use 'tokens' as t;
+
+:root {
+	--bg-page: #{t.$bg-page};
+	--bg-surface: #{t.$bg-surface};
+	--bg-surface-alt: #{t.$bg-surface-alt};
+	--text-primary: #{t.$text-primary};
+	--text-secondary: #{t.$text-secondary};
+	--accent: #{t.$accent};
+	--accent-soft: #{t.$accent-soft};
+	--status-success: #{t.$status-success};
+	--status-warning: #{t.$status-warning};
+	--status-danger: #{t.$status-danger};
+	--radius-card: #{t.$radius-card};
+	--radius-pill: #{t.$radius-pill};
+	--space-1: #{t.$space-1};
+	--space-2: #{t.$space-2};
+	--space-3: #{t.$space-3};
+	--space-4: #{t.$space-4};
+	--space-5: #{t.$space-5};
+	--space-6: #{t.$space-6};
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--bg-page);
+	color: var(--text-primary);
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+}
+
+a {
+	color: inherit;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: var(--space-2) var(--space-4);
+	border-radius: var(--radius-pill);
+	border: none;
+	font-size: 14px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: inherit;
+}
+.btn--primary {
+	background: var(--accent);
+	color: white;
+}
+.btn--ghost {
+	background: var(--bg-surface-alt);
+	color: var(--text-primary);
+}
