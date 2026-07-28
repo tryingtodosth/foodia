@@ -26,19 +26,44 @@ export const pantryStore = {
 		items = readJSON<PantryItem[]>(STORAGE_KEY) ?? [];
 		hydrated = true;
 	},
+	/**
+	 * Merges into an existing item on a match, rather than always appending — same `(name, unit)`
+	 * compound-key convention `shoppingList.ts`'s `aggregateIngredients` already establishes
+	 * (case-insensitive, trimmed), so "Sól" logged twice in the same unit becomes one row with the
+	 * summed quantity instead of two phantom-duplicate rows (CLAUDE.md Section 7 item 12/
+	 * `FUTURES.md` Section 1 — a real, previously-flagged bug, not a new behavior). A different
+	 * unit for the same ingredient name is deliberately still a separate row, for the identical
+	 * "can't safely convert units" reason `crossReferencePantry` already states.
+	 */
 	add(input: { ingredientName: string; quantity: number; unit: string }): void {
 		const trimmed = input.ingredientName.trim();
 		if (!trimmed) return;
-		items = [
-			...items,
-			{
-				id: crypto.randomUUID(),
-				ingredientName: trimmed,
-				quantity: input.quantity,
-				unit: input.unit || 'szt',
-				updatedAt: new Date().toISOString()
-			}
-		];
+		const unit = input.unit || 'szt';
+		const key = (name: string, u: string) => `${name.trim().toLowerCase()}::${u.trim().toLowerCase()}`;
+		const targetKey = key(trimmed, unit);
+		const existing = items.find((item) => key(item.ingredientName, item.unit) === targetKey);
+		if (existing) {
+			items = items.map((item) =>
+				item.id === existing.id
+					? {
+							...item,
+							quantity: item.quantity + input.quantity,
+							updatedAt: new Date().toISOString()
+						}
+					: item
+			);
+		} else {
+			items = [
+				...items,
+				{
+					id: crypto.randomUUID(),
+					ingredientName: trimmed,
+					quantity: input.quantity,
+					unit,
+					updatedAt: new Date().toISOString()
+				}
+			];
+		}
 		persist();
 	},
 	/** "Odklikuje to, co zużyła" (CLAUDE.md 4.5) — P1 has no MealPlan to reconcile against, so
