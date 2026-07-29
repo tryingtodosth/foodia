@@ -8,6 +8,14 @@
 	import { mealPlanStore } from '$lib/state/mealPlan.svelte';
 	import { pantryStore } from '$lib/state/pantry.svelte';
 	import { mockApiClient } from '$lib/api/mock';
+	import { httpApiClient } from '$lib/api/http';
+
+	// See vite.config.ts's own comment — this route has no +page.server.ts (by design, its core
+	// data is client-only), so it can't learn which build target it's in from a server load the
+	// way every other route already does. The Capacitor build is fully static — there's no
+	// `/api/recipes` server route in that output at all, ever, so calling httpApiClient there
+	// would just 404 — mockApiClient is the only architecturally honest choice for that target.
+	const recipeApiClient = __IS_CAPACITOR__ ? mockApiClient : httpApiClient;
 	import { aggregateIngredients, crossReferencePantry } from '$lib/utils/shoppingList';
 	import { formatShoppingListText, copyToClipboard, exportToEGrocery } from '$lib/utils/shoppingExport';
 	import { toISODate, mondayOf, addDays, formatShortDate } from '$lib/utils/week';
@@ -32,7 +40,7 @@
 			return;
 		}
 		loading = true;
-		mockApiClient.getManyDetails(ids).then((details) => {
+		recipeApiClient.getManyDetails(ids).then((details) => {
 			recipesById = Object.fromEntries(details.map((r) => [r.id, r]));
 			loading = false;
 		});

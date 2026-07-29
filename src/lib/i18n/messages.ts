@@ -91,6 +91,11 @@ const pl = {
 	'onboarding.next': 'Dalej',
 	'onboarding.done': 'Gotowe',
 
+	'dataExport.heading': 'Twoje dane',
+	'dataExport.lede':
+		'Profil, spiżarnia i plany posiłków żyją wyłącznie w tej przeglądarce — nic z tego nie jest jeszcze zsynchronizowane z żadnym serwerem. Pobierz kopię wszystkiego w jednym pliku JSON, na wszelki wypadek.',
+	'dataExport.button': '⬇️ Pobierz moje dane',
+
 	'pantry.title': 'Twoja spiżarnia',
 	'pantry.lede':
 		'Odznacz składnik, gdy go zużyjesz. To jeszcze nie porównuje się z planem tygodnia (to dopiero P2) — na razie to Twoja prywatna checklista, zapisana tylko na tym urządzeniu.',
@@ -263,7 +268,67 @@ const pl = {
 	'moderation.markRecognized': 'Oznacz jako sprawdzone',
 	'moderation.recognizedHeading': 'Już wyróżnione',
 	'moderation.unmark': 'Cofnij',
-	'moderation.netScore': '+{n} głosów netto'
+	'moderation.netScore': '+{n} głosów netto',
+
+	'activity.pageTitle': 'Twoja aktywność',
+	'activity.lede':
+		'Prywatny widok — widzisz tylko Ty. Pokazuje, co faktycznie stało się z Twoimi zgłoszeniami i komentarzami w tej przeglądarce; nic stąd nie jest publiczne ani widoczne dla innych.',
+	'activity.accountHeading': 'Twoje konto',
+	'activity.accountAuthenticated': 'Zalogowano jako {name}.',
+	'activity.accountAnonymous':
+		'Nie jesteś zalogowana(y) — Twoje działania są przypisane do tymczasowej, lokalnej tożsamości w tej przeglądarce, nie do prawdziwego konta.',
+	'activity.reportsHeading': 'Twoje zgłoszenia',
+	'activity.reportsEmpty': 'Nie zgłosiłaś(eś) jeszcze żadnego komentarza.',
+	'activity.status.pending': 'W trakcie rozpatrywania',
+	'activity.status.removed': 'Komentarz usunięty',
+	'activity.status.dismissed': 'Zgłoszenie odrzucone',
+	'activity.removedHeading': 'Twoje komentarze usunięte przez moderację',
+	'activity.removedEmpty': 'Żaden z Twoich komentarzy nie został usunięty.',
+	'activity.notYetHeading': 'Czego tu jeszcze nie ma',
+	'activity.notYetBody':
+		'Historii logowań/urządzeń i historii edycji komentarzy lub przepisów — ta pierwsza potrzebuje prawdziwego backendu, a ta druga potrzebuje najpierw funkcji edycji komentarzy, której jeszcze nie ma. Flagowane wprost, a nie pominięte milczeniem.',
+	'activity.linkFromProfile': 'Zobacz swoją aktywność →',
+	'activity.navLink': 'Twoja aktywność',
+
+	'nav.newRecipe': '+ Dodaj przepis',
+	'recipeComposer.pageTitle': 'Nowy przepis',
+	'recipeComposer.loginRequired': 'Musisz być zalogowana(y), żeby opublikować przepis.',
+	'recipeComposer.loginLink': 'Zaloguj się →',
+	'recipeComposer.basicsHeading': 'Podstawy',
+	'recipeComposer.nameLabel': 'Nazwa przepisu',
+	'recipeComposer.summaryLabel': 'Krótkie podsumowanie (1-2 zdania)',
+	'recipeComposer.descriptionLabel': 'Pełny opis',
+	'recipeComposer.heroImageLabel': 'Adres URL zdjęcia (opcjonalnie)',
+	'recipeComposer.tagsLabel': 'Tagi (oddziel przecinkami)',
+	'recipeComposer.dietFlagsLabel': 'Etykiety diety (oddziel przecinkami)',
+	'recipeComposer.equipmentLabel': 'Wymagany sprzęt',
+	'recipeComposer.timeLabel': 'Czas (minuty)',
+	'recipeComposer.costLabel': 'Szacowany koszt (PLN, opcjonalnie)',
+	'recipeComposer.macrosHeading': 'Wartości odżywcze (na cały przepis)',
+	'recipeComposer.kcalLabel': 'Kalorie (kcal)',
+	'recipeComposer.proteinLabel': 'Białko (g)',
+	'recipeComposer.fatLabel': 'Tłuszcz (g)',
+	'recipeComposer.carbsLabel': 'Węglowodany (g)',
+	'recipeComposer.ingredientsHeading': 'Składniki',
+	'recipeComposer.ingredientsHint': 'Przeciągnij za uchwyt ⠿, żeby zmienić kolejność.',
+	'recipeComposer.ingredientNamePlaceholder': 'np. Mąka pszenna',
+	'recipeComposer.quantityPlaceholder': 'Ilość',
+	'recipeComposer.unitPlaceholder': 'Jednostka',
+	'recipeComposer.addIngredient': '+ Dodaj składnik',
+	'recipeComposer.removeIngredient': 'Usuń',
+	'recipeComposer.stepsHeading': 'Kroki przygotowania',
+	'recipeComposer.stepsHint': 'Przeciągnij za uchwyt ⠿, żeby zmienić kolejność. Zaznacz, których składników dotyczy dany krok.',
+	'recipeComposer.stepTextPlaceholder': 'Opisz ten krok...',
+	'recipeComposer.stepDurationLabel': 'Czas (min, opcjonalnie — pokaże minutnik w Trybie gotowania)',
+	'recipeComposer.stepUsesLabel': 'Użyte składniki:',
+	'recipeComposer.addStep': '+ Dodaj krok',
+	'recipeComposer.removeStep': 'Usuń krok',
+	'recipeComposer.publish': 'Opublikuj przepis',
+	'recipeComposer.publishing': 'Publikowanie...',
+	'recipeComposer.errorGeneric': 'Nie udało się opublikować przepisu. Sprawdź, czy wszystkie pola są wypełnione.',
+	'recipeComposer.minimumNote': 'Potrzebny jest co najmniej jeden składnik i jeden krok.',
+	'recipeComposer.noBackend':
+		'Dodawanie przepisów wymaga prawdziwego serwera, którego ta (statyczna) wersja aplikacji nie ma.'
 } as const;
 
 const en = {
@@ -348,6 +413,11 @@ const en = {
 	'onboarding.back': 'Back',
 	'onboarding.next': 'Next',
 	'onboarding.done': 'Done',
+
+	'dataExport.heading': 'Your data',
+	'dataExport.lede':
+		"Your profile, pantry, and meal plans live only in this browser — none of it syncs to any server yet. Download a copy of everything as one JSON file, just in case.",
+	'dataExport.button': '⬇️ Download my data',
 
 	'pantry.title': 'Your pantry',
 	'pantry.lede':
@@ -520,7 +590,66 @@ const en = {
 	'moderation.markRecognized': 'Mark as verified',
 	'moderation.recognizedHeading': 'Already verified',
 	'moderation.unmark': 'Undo',
-	'moderation.netScore': '+{n} net votes'
+	'moderation.netScore': '+{n} net votes',
+
+	'activity.pageTitle': 'Your activity',
+	'activity.lede':
+		"Private — only you see this. Shows what actually happened to your reports and comments in this browser; none of it is public or visible to anyone else.",
+	'activity.accountHeading': 'Your account',
+	'activity.accountAuthenticated': 'Logged in as {name}.',
+	'activity.accountAnonymous':
+		"You're not logged in — your activity is attributed to a temporary, local identity in this browser, not a real account.",
+	'activity.reportsHeading': 'Reports you’ve filed',
+	'activity.reportsEmpty': "You haven't reported any comments yet.",
+	'activity.status.pending': 'Under review',
+	'activity.status.removed': 'Comment removed',
+	'activity.status.dismissed': 'Report dismissed',
+	'activity.removedHeading': 'Your comments removed by moderation',
+	'activity.removedEmpty': 'None of your comments have been removed.',
+	'activity.notYetHeading': "What's not here yet",
+	'activity.notYetBody':
+		"Login/device history and edit history for comments or recipes — the first needs a real backend, the second needs a comment-editing feature that doesn't exist yet either. Flagged outright, not left silently missing.",
+	'activity.linkFromProfile': 'See your activity →',
+	'activity.navLink': 'Your activity',
+
+	'nav.newRecipe': '+ Add recipe',
+	'recipeComposer.pageTitle': 'New recipe',
+	'recipeComposer.loginRequired': 'You need to be logged in to publish a recipe.',
+	'recipeComposer.loginLink': 'Log in →',
+	'recipeComposer.basicsHeading': 'Basics',
+	'recipeComposer.nameLabel': 'Recipe name',
+	'recipeComposer.summaryLabel': 'Short summary (1-2 sentences)',
+	'recipeComposer.descriptionLabel': 'Full description',
+	'recipeComposer.heroImageLabel': 'Image URL (optional)',
+	'recipeComposer.tagsLabel': 'Tags (comma-separated)',
+	'recipeComposer.dietFlagsLabel': 'Diet labels (comma-separated)',
+	'recipeComposer.equipmentLabel': 'Required equipment',
+	'recipeComposer.timeLabel': 'Time (minutes)',
+	'recipeComposer.costLabel': 'Estimated cost (PLN, optional)',
+	'recipeComposer.macrosHeading': 'Nutrition (whole recipe)',
+	'recipeComposer.kcalLabel': 'Calories (kcal)',
+	'recipeComposer.proteinLabel': 'Protein (g)',
+	'recipeComposer.fatLabel': 'Fat (g)',
+	'recipeComposer.carbsLabel': 'Carbs (g)',
+	'recipeComposer.ingredientsHeading': 'Ingredients',
+	'recipeComposer.ingredientsHint': 'Drag the ⠿ handle to reorder.',
+	'recipeComposer.ingredientNamePlaceholder': 'e.g. Wheat flour',
+	'recipeComposer.quantityPlaceholder': 'Quantity',
+	'recipeComposer.unitPlaceholder': 'Unit',
+	'recipeComposer.addIngredient': '+ Add ingredient',
+	'recipeComposer.removeIngredient': 'Remove',
+	'recipeComposer.stepsHeading': 'Preparation steps',
+	'recipeComposer.stepsHint': 'Drag the ⠿ handle to reorder. Check which ingredients each step uses.',
+	'recipeComposer.stepTextPlaceholder': 'Describe this step...',
+	'recipeComposer.stepDurationLabel': 'Time (min, optional — shows a timer in Cooking Mode)',
+	'recipeComposer.stepUsesLabel': 'Ingredients used:',
+	'recipeComposer.addStep': '+ Add step',
+	'recipeComposer.removeStep': 'Remove step',
+	'recipeComposer.publish': 'Publish recipe',
+	'recipeComposer.publishing': 'Publishing...',
+	'recipeComposer.errorGeneric': "Couldn't publish the recipe. Check that every field is filled in.",
+	'recipeComposer.minimumNote': 'At least one ingredient and one step are required.',
+	'recipeComposer.noBackend': "Adding recipes needs a real server, which this (static) build doesn't have."
 } satisfies Record<keyof typeof pl, string>;
 
 export const messages = { pl, en };

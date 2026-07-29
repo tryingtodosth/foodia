@@ -8,5 +8,19 @@
 	// and makes @sveltejs/adapter-cloudflare emit the Pages bundle (_worker.js + _routes.json) there.
 	"pages_build_output_dir": ".svelte-kit/cloudflare",
 	"compatibility_date": "2026-07-28",
-	"compatibility_flags": ["nodejs_compat"]
+	"compatibility_flags": ["nodejs_compat"],
+	// D1 (Session 16 — see CLAUDE.md Section 1's own updated entry for why Cloudflare-native, not
+	// Django). `database_id` below is a REAL placeholder, not a working one — `--local` mode (what
+	// `npm run dev`/the platformProxy use) never calls Cloudflare's API and doesn't need a real id,
+	// but deploying for real requires running `wrangler login` then `wrangler d1 create foodia-db`
+	// yourself (needs your own Cloudflare account) and pasting the id that command prints here.
+	// This repo/environment has no Cloudflare auth, so that one step genuinely can't be done here.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "foodia-db",
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "drizzle"
+		}
+	]
 }

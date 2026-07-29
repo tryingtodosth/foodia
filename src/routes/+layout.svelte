@@ -64,6 +64,7 @@
 			<a href="/shopping-list">{t('nav.shoppingList')}</a>
 			<a href="/pantry">{t('nav.pantry')}</a>
 			<a href="/onboarding">{t('nav.profile')}</a>
+			<a href="/recipes/new">{t('nav.newRecipe')}</a>
 		</nav>
 		<div class="shell__account">
 			<UserAvatarMenu />

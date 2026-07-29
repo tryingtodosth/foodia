@@ -17,6 +17,7 @@
 			{#if authStore.account.isModerator}
 				<a href="/moderation">{t('moderation.pageTitle')}</a>
 			{/if}
+			<a href="/activity">{t('activity.navLink')}</a>
 			<button type="button" onclick={handleLogout}>{t('auth.nav.logout')}</button>
 		</div>
 	</details>

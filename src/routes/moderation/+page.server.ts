@@ -1,7 +1,7 @@
-import { mockApiClient } from '$lib/api/mock';
+import { getRecipeApiClient } from '$lib/server/api/client';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ platform }) => {
 	// Full RecipeDetail, not the thin Card list — the substitution-recognition queue below needs
 	// each recipe's own ingredients/substitutions, which a bare RecipeCard doesn't carry. Same
 	// reasoning routes/+page.server.ts/plan/+page.server.ts already give for their own listDetails()
@@ -11,6 +11,6 @@ export const load: PageServerLoad = async () => {
 	// aggregated anywhere shared — see substitutionModeration.svelte.ts's own header comment), so
 	// there is nothing for a live-proposed substitution to become eligible FROM in this mock-era
 	// build. Flagged as a real, stated scope boundary, not silently glossed over.
-	const recipes = await mockApiClient.listDetails();
+	const recipes = await getRecipeApiClient(platform).listDetails();
 	return { recipes };
 };
