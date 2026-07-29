@@ -4,13 +4,17 @@
 // passwords identically whether it's called from a real request or from the seed script (Task 27)
 // — no special-cased plaintext path for seeded accounts.
 //
-// Iteration count matches current OWASP guidance for PBKDF2-HMAC-SHA256 (600,000+, reviewed
-// periodically as hardware gets faster — this is a real number to revisit, not a magic constant).
-// Stored inline as `iterations:saltHex:hashHex` so a future iteration-count bump doesn't invalidate
-// passwords hashed under the old count — `verifyPassword` always re-derives using whatever count
+// OWASP's current PBKDF2-HMAC-SHA256 guidance recommends 600,000+ iterations, but the Workers
+// runtime's own `crypto.subtle.deriveBits` hard-rejects anything above 100,000 — a real platform
+// ceiling, not a tunable budget: `NotSupportedError: Pbkdf2 failed: iteration counts above 100000
+// are not supported`, discovered live on this app's first real Cloudflare deploy (every register/
+// login 500'd; local Miniflare enforces no such cap, so this was invisible until real Workers ran
+// it — CLAUDE.md Session 21). 100,000 is what the platform allows, so it's the ceiling here too.
+// Stored inline as `iterations:saltHex:hashHex` so a future platform change doesn't invalidate
+// passwords hashed under today's count — `verifyPassword` always re-derives using whatever count
 // is stored on that row, not today's constant.
 
-const DEFAULT_ITERATIONS = 600_000;
+const DEFAULT_ITERATIONS = 100_000;
 const HASH_ALGO = 'SHA-256';
 const KEY_LENGTH_BITS = 256;
 

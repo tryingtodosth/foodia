@@ -209,16 +209,175 @@ function toCard(detail: RecipeDetail): RecipeCard {
 	return card;
 }
 
+function groupBy<T, K>(rows: T[], key: (row: T) => K): Map<K, T[]> {
+	const map = new Map<K, T[]>();
+	for (const row of rows) {
+		const k = key(row);
+		const list = map.get(k) ?? [];
+		list.push(row);
+		map.set(k, list);
+	}
+	return map;
+}
+
+/** `assembleRecipeDetail` above does exactly the right thing for ONE recipe: N parallel queries,
+ *  fine when N is a handful. `list()`/`listDetails()` need EVERY recipe though, and calling that
+ *  function once per row turns into 7 queries × recipe count — 469 real D1 subrequests for this
+ *  app's own 67 seeded recipes, invisible against local Miniflare's in-process SQLite (basically
+ *  free) but a genuine hang against real D1 (a live, production-only bug this app hit on its own
+ *  first real Cloudflare deploy — CLAUDE.md Session 21). This does the same assembly with the
+ *  query count held constant regardless of recipe count: one bulk, unfiltered `select()` per
+ *  table (this app has no pagination yet — every table is small enough to load whole), then the
+ *  exact same per-row field mapping `assembleRecipeDetail` uses, grouped in-memory instead of
+ *  re-fetched per recipe. `getDetail`/`getManyDetails` keep the simpler per-recipe path — a
+ *  handful of ids has no N+1 problem worth this bulk machinery. */
+async function assembleAllRecipeDetails(db: Db): Promise<RecipeDetail[]> {
+	const [recipeRows, users, ingredientRows, stepRows, versionRows, commentRows, translationRows] =
+		await Promise.all([
+			db.select().from(schema.recipes),
+			loadUserMap(db),
+			db.select().from(schema.ingredients).orderBy(schema.ingredients.orderIndex),
+			db.select().from(schema.steps).orderBy(schema.steps.orderIndex),
+			db.select().from(schema.recipeVersions),
+			db.select().from(schema.comments).where(eq(schema.comments.visibility, 'public')),
+			db.select().from(schema.translations)
+		]);
+
+	const [subRows, altRows] = await Promise.all([
+		db.select().from(schema.substitutions),
+		db.select().from(schema.stepAlternatives)
+	]);
+
+	const ingredientsByRecipe = groupBy(ingredientRows, (i) => i.recipeId);
+	const stepsByRecipe = groupBy(stepRows, (s) => s.recipeId);
+	const versionsByRecipe = groupBy(versionRows, (v) => v.recipeId);
+	const commentsByRecipe = groupBy(commentRows, (c) => c.recipeId);
+	const translationsByRecipe = groupBy(translationRows, (t) => t.recipeId);
+	const subsByIngredient = groupBy(subRows, (s) => s.forIngredientId);
+	const altsByStep = groupBy(altRows, (a) => a.forStepId);
+
+	return recipeRows.map((recipeRow) => {
+		const author = users.get(recipeRow.authorId);
+		if (!author) throw new Error(`Recipe ${recipeRow.id} references unknown author ${recipeRow.authorId}`);
+
+		const ingredients: Ingredient[] = (ingredientsByRecipe.get(recipeRow.id) ?? []).map((i) => ({
+			id: i.id,
+			name: i.name,
+			quantity: i.quantity,
+			unit: i.unit,
+			substitutable: i.substitutable,
+			substitutions: (subsByIngredient.get(i.id) ?? []).map((s) => ({
+				id: s.id,
+				forIngredientId: s.forIngredientId,
+				name: s.name,
+				ratio: s.ratio,
+				deltaMacros: s.deltaMacros ?? undefined,
+				reactions: { upCount: s.upCount, downCount: s.downCount, currentUserReaction: null },
+				source: s.source,
+				proposedBy: s.proposedById ? users.get(s.proposedById) : undefined
+			}))
+		}));
+
+		const steps: Step[] = (stepsByRecipe.get(recipeRow.id) ?? []).map((s, index) => ({
+			id: s.id,
+			order: index + 1,
+			text: s.text,
+			durationMinutes: s.durationMinutes ?? undefined,
+			requiresEquipment: s.requiresEquipment ?? undefined,
+			ingredientIds: s.ingredientIds,
+			alternatives: (altsByStep.get(s.id) ?? []).map((a) => ({
+				id: a.id,
+				forStepId: a.forStepId,
+				text: a.text,
+				requiresEquipment: a.requiresEquipment ?? undefined,
+				durationMinutes: a.durationMinutes ?? undefined,
+				reactions: { upCount: a.upCount, downCount: a.downCount, currentUserReaction: null },
+				source: a.source,
+				proposedBy: a.proposedById ? users.get(a.proposedById) : undefined
+			}))
+		}));
+
+		const recipeVersionRows = versionsByRecipe.get(recipeRow.id) ?? [];
+		const versions: RecipeVersion[] | undefined = recipeVersionRows.length
+			? recipeVersionRows.map((v) => ({ id: v.id.split('::')[1] ?? v.id, label: v.label, parentRecipeId: v.parentRecipeId }))
+			: undefined;
+
+		const recipeCommentRows = commentsByRecipe.get(recipeRow.id) ?? [];
+		const comments: NodeComment[] | undefined = recipeCommentRows.length
+			? recipeCommentRows.map((c) => {
+					const commentAuthor = users.get(c.authorId);
+					if (!commentAuthor) throw new Error(`Comment ${c.id} references unknown author ${c.authorId}`);
+					return {
+						id: c.id,
+						target: { type: c.targetType, id: c.targetId },
+						content: c.content,
+						visibility: c.visibility,
+						author: commentAuthor,
+						reactions: { upCount: c.upCount, downCount: c.downCount, currentUserReaction: null },
+						createdAt: c.createdAt
+					};
+				})
+			: undefined;
+
+		const recipeTranslationRows = translationsByRecipe.get(recipeRow.id) ?? [];
+		const translations: Translation[] | undefined = recipeTranslationRows.length
+			? recipeTranslationRows.map((t) => {
+					const translator = users.get(t.translatedById);
+					if (!translator) throw new Error(`Translation ${t.id} references unknown translator ${t.translatedById}`);
+					return {
+						id: t.id,
+						recipeId: t.recipeId,
+						locale: t.locale,
+						fields: t.fields,
+						translatedBy: translator,
+						reactions: { upCount: t.upCount, downCount: t.downCount, currentUserReaction: null },
+						createdAt: t.createdAt
+					};
+				})
+			: undefined;
+
+		return {
+			id: recipeRow.id,
+			name: recipeRow.name,
+			summary: recipeRow.summary,
+			description: recipeRow.description,
+			heroImage: recipeRow.heroImage,
+			author,
+			tags: recipeRow.tags,
+			dietFlags: recipeRow.dietFlags,
+			requiredEquipment: recipeRow.requiredEquipment,
+			timeMinutes: recipeRow.timeMinutes,
+			costEstimate:
+				recipeRow.costAmount !== null && recipeRow.costCurrency !== null
+					? { amount: recipeRow.costAmount, currency: recipeRow.costCurrency }
+					: undefined,
+			macros: {
+				kcal: recipeRow.kcal,
+				proteinG: recipeRow.proteinG,
+				fatG: recipeRow.fatG,
+				carbsG: recipeRow.carbsG
+			},
+			reactions: { upCount: recipeRow.upCount, downCount: recipeRow.downCount, currentUserReaction: null },
+			createdAt: recipeRow.createdAt,
+			updatedAt: recipeRow.updatedAt,
+			sourceLocale: recipeRow.sourceLocale ?? undefined,
+			ingredients,
+			steps,
+			versions,
+			comments,
+			translations
+		};
+	});
+}
+
 export function createDbApiClient(db: Db): RecipeApiClient {
 	return {
 		async list() {
-			const [recipeRows, users] = await Promise.all([db.select().from(schema.recipes), loadUserMap(db)]);
-			const details = await Promise.all(recipeRows.map((r) => assembleRecipeDetail(db, r, users)));
+			const details = await assembleAllRecipeDetails(db);
 			return details.map(toCard);
 		},
 		async listDetails() {
-			const [recipeRows, users] = await Promise.all([db.select().from(schema.recipes), loadUserMap(db)]);
-			return Promise.all(recipeRows.map((r) => assembleRecipeDetail(db, r, users)));
+			return assembleAllRecipeDetails(db);
 		},
 		async getCard(id: string) {
 			return toCard(await this.getDetail(id));

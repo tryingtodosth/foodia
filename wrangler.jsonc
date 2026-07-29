@@ -10,16 +10,14 @@
 	"compatibility_date": "2026-07-28",
 	"compatibility_flags": ["nodejs_compat"],
 	// D1 (Session 16 — see CLAUDE.md Section 1's own updated entry for why Cloudflare-native, not
-	// Django). `database_id` below is a REAL placeholder, not a working one — `--local` mode (what
-	// `npm run dev`/the platformProxy use) never calls Cloudflare's API and doesn't need a real id,
-	// but deploying for real requires running `wrangler login` then `wrangler d1 create foodia-db`
-	// yourself (needs your own Cloudflare account) and pasting the id that command prints here.
-	// This repo/environment has no Cloudflare auth, so that one step genuinely can't be done here.
+	// Django). Real database, created via `wrangler d1 create foodia-db` against the account tied to
+	// piotr.putylo96@gmail.com (Session 21 — real Cloudflare deploy). `--local` mode (what
+	// `npm run dev`/the platformProxy use) still never calls Cloudflare's API and ignores this id.
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "foodia-db",
-			"database_id": "00000000-0000-0000-0000-000000000000",
+			"database_id": "6bacf9d0-b5c2-4643-9e14-e1bf39ceee84",
 			"migrations_dir": "drizzle"
 		}
 	]
