@@ -7,10 +7,23 @@
 	import type { MessageKey } from '$lib/i18n/messages';
 	import type { HardwareProfile } from '$lib/types/user';
 
+	// `onsubmit` may return a Promise<boolean> (Session 22 — now a real POST /api/step-alternatives
+	// call, replacing the old session-only `sessionStepAlternativesStore` push): true collapses the
+	// form, false keeps it open with the entered text and shows an inline error. `toggleLabel`
+	// overrides the default toggle text — the recipe page passes a swap-specific label when this
+	// instance is proposing a step change for a specific ingredient substitution, not a generic
+	// equipment-driven alternative (see `+page.svelte`'s own `linkedSubstitutionFor`).
 	let {
-		onsubmit
-	}: { onsubmit: (text: string, requiresEquipment: string[], durationMinutes: number | null) => void } =
-		$props();
+		onsubmit,
+		toggleLabel
+	}: {
+		onsubmit: (
+			text: string,
+			requiresEquipment: string[],
+			durationMinutes: number | null
+		) => boolean | Promise<boolean> | void;
+		toggleLabel?: string;
+	} = $props();
 
 	const HARDWARE_KEYS: (keyof HardwareProfile)[] = [
 		'oven',
@@ -24,6 +37,8 @@
 	let text = $state('');
 	let selectedEquipment = $state<string[]>([]);
 	let durationMinutes = $state<number | ''>('');
+	let submitting = $state(false);
+	let failed = $state(false);
 
 	function toggleEquipment(key: string) {
 		selectedEquipment = selectedEquipment.includes(key)
@@ -31,10 +46,17 @@
 			: [...selectedEquipment, key];
 	}
 
-	function submit() {
+	async function submit() {
 		const trimmed = text.trim();
 		if (!trimmed) return;
-		onsubmit(trimmed, selectedEquipment, durationMinutes === '' ? null : durationMinutes);
+		failed = false;
+		submitting = true;
+		const result = await onsubmit(trimmed, selectedEquipment, durationMinutes === '' ? null : durationMinutes);
+		submitting = false;
+		if (result === false) {
+			failed = true;
+			return;
+		}
 		text = '';
 		selectedEquipment = [];
 		durationMinutes = '';
@@ -46,12 +68,13 @@
 		text = '';
 		selectedEquipment = [];
 		durationMinutes = '';
+		failed = false;
 	}
 </script>
 
 {#if !open}
 	<button type="button" class="composer-toggle" onclick={() => (open = true)}>
-		{t('stepAlternative.proposeToggle')}
+		{toggleLabel ?? t('stepAlternative.proposeToggle')}
 	</button>
 {:else}
 	<form
@@ -82,9 +105,12 @@
 			{t('stepAlternative.durationLabel')}
 			<input type="number" min="1" bind:value={durationMinutes} placeholder="np. 20" />
 		</label>
+		{#if failed}
+			<p class="composer__error">{t('stepAlternative.postError')}</p>
+		{/if}
 		<div class="composer__actions">
 			<button type="button" class="btn btn--ghost" onclick={cancel}>{t('comment.cancel')}</button>
-			<button type="submit" class="btn btn--primary">{t('comment.add')}</button>
+			<button type="submit" class="btn btn--primary" disabled={submitting}>{t('comment.add')}</button>
 		</div>
 	</form>
 {/if}
@@ -159,5 +185,10 @@
 	.composer__actions {
 		display: flex;
 		gap: var(--space-2);
+	}
+	.composer__error {
+		margin: 0;
+		font-size: 12px;
+		color: var(--status-danger);
 	}
 </style>

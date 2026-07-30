@@ -8,16 +8,28 @@
 	// (recipe-author-curated) substitutions bother calculating one.
 	import { t } from '$lib/i18n/t';
 
-	let { onsubmit }: { onsubmit: (name: string, ratio: number) => void } = $props();
+	// `onsubmit` may return a Promise<boolean> (Session 22 — now a real POST /api/substitutions
+	// call): true collapses the form, false keeps it open with the entered text and an inline error.
+	let { onsubmit }: { onsubmit: (name: string, ratio: number) => boolean | Promise<boolean> | void } =
+		$props();
 
 	let open = $state(false);
 	let name = $state('');
 	let ratio = $state(1);
+	let submitting = $state(false);
+	let failed = $state(false);
 
-	function submit() {
+	async function submit() {
 		const trimmed = name.trim();
 		if (!trimmed) return;
-		onsubmit(trimmed, ratio);
+		failed = false;
+		submitting = true;
+		const result = await onsubmit(trimmed, ratio);
+		submitting = false;
+		if (result === false) {
+			failed = true;
+			return;
+		}
 		name = '';
 		ratio = 1;
 		open = false;
@@ -27,6 +39,7 @@
 		open = false;
 		name = '';
 		ratio = 1;
+		failed = false;
 	}
 </script>
 
@@ -49,8 +62,11 @@
 		</label>
 		<div class="composer__actions">
 			<button type="button" class="btn btn--ghost" onclick={cancel}>{t('comment.cancel')}</button>
-			<button type="submit" class="btn btn--primary">{t('comment.add')}</button>
+			<button type="submit" class="btn btn--primary" disabled={submitting}>{t('comment.add')}</button>
 		</div>
+		{#if failed}
+			<p class="composer__error">{t('substitution.postError')}</p>
+		{/if}
 	</form>
 {/if}
 
@@ -105,5 +121,11 @@
 	.composer__actions {
 		display: flex;
 		gap: var(--space-1);
+	}
+	.composer__error {
+		width: 100%;
+		margin: 0;
+		font-size: 12px;
+		color: var(--status-danger);
 	}
 </style>

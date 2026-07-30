@@ -62,6 +62,11 @@ export interface StepAlternative {
 	text: string;
 	requiresEquipment?: string[]; // HardwareProfile keys this alternate technique needs instead
 	durationMinutes?: number; // the alternate technique may take a different amount of time
+	/** Session 22 — an ingredient swap can require a step to change too (a longer bake time, a
+	 *  different technique), not just an equipment substitute. When set, this alternative exists
+	 *  BECAUSE of that specific `Substitution`, not as a general equipment-driven technique — the
+	 *  recipe page uses this to suggest the change the moment the cook actually picks that swap. */
+	triggeredBySubstitutionId?: string;
 	reactions?: ReactionSummary;
 	source: 'system' | 'community';
 	proposedBy?: UserRef;

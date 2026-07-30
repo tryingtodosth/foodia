@@ -2,6 +2,7 @@
 	import type { RecipeCard } from '$lib/types/recipe';
 	import { profileStore } from '$lib/state/profile.svelte';
 	import { equipmentMatchLabel } from '$lib/utils/hardware';
+	import { t } from '$lib/i18n/t';
 
 	let { recipe }: { recipe: RecipeCard } = $props();
 
@@ -10,51 +11,73 @@
 	);
 </script>
 
-<a class="card" href={`/recipes/${recipe.id}`}>
-	<div class="card__hero" aria-hidden="true"></div>
-	<div class="card__body">
-		<h3 class="card__title">{recipe.name}</h3>
-		<p class="card__summary">{recipe.summary}</p>
-		<div class="card__meta">
-			<span>⏱ {recipe.timeMinutes} min</span>
-			<span>🔥 {recipe.macros.kcal} kcal</span>
-			{#if recipe.costEstimate}
-				<span>💸 {recipe.costEstimate.amount} {recipe.costEstimate.currency}</span>
+<div class="card">
+	<!-- The author link is a sibling of this anchor, not nested inside it — HTML forbids nesting
+	     <a> tags, and the card as a whole was already one big link to the recipe itself before the
+	     author name needed to become independently clickable (Session 22). -->
+	<a class="card__link" href={`/recipes/${recipe.id}`}>
+		<div class="card__hero" aria-hidden="true"></div>
+		<div class="card__body">
+			<h3 class="card__title">{recipe.name}</h3>
+			<p class="card__summary">{recipe.summary}</p>
+			<div class="card__meta">
+				<span>⏱ {recipe.timeMinutes} min</span>
+				<span>🔥 {recipe.macros.kcal} kcal</span>
+				{#if recipe.costEstimate}
+					<span>💸 {recipe.costEstimate.amount} {recipe.costEstimate.currency}</span>
+				{/if}
+			</div>
+			{#if recipe.dietFlags.length}
+				<div class="card__tags">
+					{#each recipe.dietFlags as flag (flag)}
+						<span class="card__tag card__tag--diet">{flag}</span>
+					{/each}
+				</div>
+			{/if}
+			{#if recipe.tags.length}
+				<div class="card__tags">
+					{#each recipe.tags as tag (tag)}
+						<span class="card__tag">#{tag}</span>
+					{/each}
+				</div>
+			{/if}
+			{#if matchLabel}
+				<p class="card__match">✓ {matchLabel}</p>
 			{/if}
 		</div>
-		{#if recipe.dietFlags.length}
-			<div class="card__tags">
-				{#each recipe.dietFlags as flag (flag)}
-					<span class="card__tag card__tag--diet">{flag}</span>
-				{/each}
-			</div>
-		{/if}
-		{#if recipe.tags.length}
-			<div class="card__tags">
-				{#each recipe.tags as tag (tag)}
-					<span class="card__tag">#{tag}</span>
-				{/each}
-			</div>
-		{/if}
-		{#if matchLabel}
-			<p class="card__match">✓ {matchLabel}</p>
-		{/if}
-	</div>
-</a>
+	</a>
+	<a class="card__author" href={`/users/${recipe.author.id}`}>
+		{t('recipe.byAuthor', { author: recipe.author.displayName })}
+	</a>
+</div>
 
 <style lang="scss">
 	.card {
-		display: block;
+		display: flex;
+		flex-direction: column;
 		background: var(--bg-surface);
 		border-radius: var(--radius-card);
 		overflow: hidden;
-		text-decoration: none;
-		color: var(--text-primary);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 		transition: transform 0.15s ease;
 
 		&:hover {
 			transform: translateY(-2px);
+		}
+	}
+	.card__link {
+		display: block;
+		text-decoration: none;
+		color: var(--text-primary);
+	}
+	.card__author {
+		padding: 0 var(--space-3) var(--space-3);
+		font-size: 12px;
+		color: var(--text-secondary);
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
 		}
 	}
 	.card__hero {

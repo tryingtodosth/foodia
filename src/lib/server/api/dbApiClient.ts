@@ -104,6 +104,7 @@ async function assembleRecipeDetail(
 			text: a.text,
 			requiresEquipment: a.requiresEquipment ?? undefined,
 			durationMinutes: a.durationMinutes ?? undefined,
+			triggeredBySubstitutionId: a.triggeredBySubstitutionId ?? undefined,
 			reactions: { upCount: a.upCount, downCount: a.downCount, currentUserReaction: null },
 			source: a.source,
 			proposedBy: a.proposedById ? users.get(a.proposedById) : undefined
@@ -291,6 +292,7 @@ async function assembleAllRecipeDetails(db: Db): Promise<RecipeDetail[]> {
 				text: a.text,
 				requiresEquipment: a.requiresEquipment ?? undefined,
 				durationMinutes: a.durationMinutes ?? undefined,
+				triggeredBySubstitutionId: a.triggeredBySubstitutionId ?? undefined,
 				reactions: { upCount: a.upCount, downCount: a.downCount, currentUserReaction: null },
 				source: a.source,
 				proposedBy: a.proposedById ? users.get(a.proposedById) : undefined

@@ -3,17 +3,31 @@
 
 	// The write-side of Module 4's node-based comments (CLAUDE.md 4.4) — collapsed by default so
 	// a recipe with many ingredients/steps doesn't show an open textarea under every single one.
-	let { onsubmit }: { onsubmit: (content: string, visibility: 'public' | 'private') => void } =
+	// `onsubmit` may return a Promise<boolean> (Session 22 — now a real POST /api/comments call,
+	// not a synchronous local push): true collapses the form, false/rejection keeps it open with
+	// the entered text intact and shows an inline error, rather than silently discarding it.
+	let {
+		onsubmit
+	}: { onsubmit: (content: string, visibility: 'public' | 'private') => boolean | Promise<boolean> | void } =
 		$props();
 
 	let open = $state(false);
 	let content = $state('');
 	let visibility = $state<'public' | 'private'>('public');
+	let submitting = $state(false);
+	let failed = $state(false);
 
-	function submit() {
+	async function submit() {
 		const trimmed = content.trim();
 		if (!trimmed) return;
-		onsubmit(trimmed, visibility);
+		failed = false;
+		submitting = true;
+		const result = await onsubmit(trimmed, visibility);
+		submitting = false;
+		if (result === false) {
+			failed = true;
+			return;
+		}
 		content = '';
 		visibility = 'public';
 		open = false;
@@ -23,6 +37,7 @@
 		open = false;
 		content = '';
 		visibility = 'public';
+		failed = false;
 	}
 </script>
 
@@ -39,6 +54,9 @@
 		}}
 	>
 		<textarea bind:value={content} placeholder={t('comment.placeholder')} rows="2"></textarea>
+		{#if failed}
+			<p class="composer__error">{t('comment.postError')}</p>
+		{/if}
 		<div class="composer__row">
 			<label class="composer__visibility">
 				<input
@@ -50,7 +68,7 @@
 			</label>
 			<div class="composer__actions">
 				<button type="button" class="btn btn--ghost" onclick={cancel}>{t('comment.cancel')}</button>
-				<button type="submit" class="btn btn--primary">{t('comment.add')}</button>
+				<button type="submit" class="btn btn--primary" disabled={submitting}>{t('comment.add')}</button>
 			</div>
 		</div>
 	</form>
@@ -87,6 +105,11 @@
 			font-size: 13px;
 			resize: vertical;
 		}
+	}
+	.composer__error {
+		margin: 0;
+		font-size: 12px;
+		color: var(--status-danger);
 	}
 	.composer__row {
 		display: flex;

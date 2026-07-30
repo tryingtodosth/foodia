@@ -127,6 +127,13 @@ export const stepAlternatives = sqliteTable('step_alternatives', {
 	text: text('text').notNull(),
 	requiresEquipment: text('requires_equipment', { mode: 'json' }).$type<string[]>(),
 	durationMinutes: integer('duration_minutes'),
+	// Session 22 — an ingredient swap can require a step to change too (a longer bake time, a
+	// different technique), not just an equipment substitute. Nullable and `set null` on delete:
+	// this alternative is real, standalone content the moment it exists — losing the substitution
+	// it was proposed alongside shouldn't take the step-level fix down with it.
+	triggeredBySubstitutionId: text('triggered_by_substitution_id').references(() => substitutions.id, {
+		onDelete: 'set null'
+	}),
 	upCount: integer('up_count').notNull().default(0),
 	downCount: integer('down_count').notNull().default(0),
 	source: text('source', { enum: ['system', 'community'] }).notNull(),

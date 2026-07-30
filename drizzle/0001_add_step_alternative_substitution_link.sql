@@ -1,0 +1,1 @@
+ALTER TABLE `step_alternatives` ADD `triggered_by_substitution_id` text REFERENCES substitutions(id);

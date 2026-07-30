@@ -14,6 +14,7 @@
 	<details class="account-menu">
 		<summary>{authStore.account.displayName}</summary>
 		<div class="account-menu__panel">
+			<a href={`/users/${authStore.account.id}`}>{t('userProfile.myProfileLink')}</a>
 			{#if authStore.account.isModerator}
 				<a href="/moderation">{t('moderation.pageTitle')}</a>
 			{/if}

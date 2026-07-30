@@ -11,6 +11,7 @@
 		missingEquipmentLabel
 	} from '$lib/utils/stepAlternative';
 	import { currentUserRef, profileStore } from '$lib/state/profile.svelte';
+	import { authStore } from '$lib/state/auth.svelte';
 	import { sessionStepAlternativesStore } from '$lib/state/stepAlternatives.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import ReactionButtons from '$lib/components/comments/ReactionButtons.svelte';
@@ -22,7 +23,7 @@
 	import StepAlternativeComposer from '$lib/components/recipe/StepAlternativeComposer.svelte';
 	import { resolveRecipeVersion, getRecipeVersions } from '$lib/utils/translations';
 	import { t } from '$lib/i18n/t';
-	import type { NodeComment, NodeType, Translation, Substitution, StepAlternative } from '$lib/types/recipe';
+	import type { NodeComment, NodeType, Translation, Substitution, StepAlternative, Step } from '$lib/types/recipe';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -37,12 +38,12 @@
 	// when an alternative would otherwise apply. Mirrors chosenSubstitutions' own shape/lifecycle.
 	let chosenStepAlternatives = $state<Record<string, string>>({});
 
-	// Community-proposed ingredient substitutions this session (CLAUDE.md 4.2) — same "addedX,
-	// merged with the loaded fixture, never mutating it" pattern every other write-side feature in
-	// this app already uses. Still page-local/reset-per-recipe-view — ingredient substitutions
-	// aren't read anywhere on /recipes/[id]/cook today (Cooking Mode doesn't render ingredients at
-	// all yet, see 4.3's own "hybrid inline instructions" gap), so there's nothing for this one to
-	// carry over into yet, unlike StepAlternatives below.
+	// Session 22 — real POST /api/substitutions writes now (previously a pure client-side push that
+	// never reached D1 at all, discovered while auditing this page for "are substitutions really
+	// discussable" — the exact same gap `addComment` below had). Still layered as "addedX, merged
+	// with the loaded fixture" on top of `recipe.ingredients`' own data, same pattern every other
+	// write-side feature here uses — a real reload picks the new row up through the normal server
+	// load instead, this is just what makes it show up without one.
 	let sessionSubstitutions = $state<Substitution[]>([]);
 	$effect(() => {
 		recipe.id;
@@ -79,11 +80,30 @@
 
 	let activeMacros = $derived(recomputeMacros(recipe, chosenSubstitutions, safeExtraSubstitutions));
 
-	function proposeSubstitution(ingredientId: string, name: string, ratio: number) {
+	/** Real POST /api/substitutions — returns null on failure (network error, validation, or not
+	 *  logged in) so the composer can show an inline error and keep the form open, rather than
+	 *  silently discarding what was typed. */
+	async function postJson(url: string, body: unknown): Promise<{ id: string } | null> {
+		try {
+			const res = await fetch(url, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!res.ok) return null;
+			return await res.json();
+		} catch {
+			return null;
+		}
+	}
+
+	async function proposeSubstitution(ingredientId: string, name: string, ratio: number): Promise<boolean> {
+		const result = await postJson('/api/substitutions', { forIngredientId: ingredientId, name, ratio });
+		if (!result) return false;
 		sessionSubstitutions = [
 			...sessionSubstitutions,
 			{
-				id: crypto.randomUUID(),
+				id: result.id,
 				forIngredientId: ingredientId,
 				name,
 				ratio,
@@ -91,6 +111,7 @@
 				proposedBy: currentUserRef()
 			}
 		];
+		return true;
 	}
 
 	/**
@@ -104,21 +125,77 @@
 		return [...base, ...extra];
 	}
 
-	function proposeStepAlternative(
+	/** Real POST /api/step-alternatives (Session 22 — previously `sessionStepAlternativesStore`
+	 *  only ever held this in one browser tab's memory, never a real D1 row; the exact same gap
+	 *  `proposeSubstitution` above just had). `triggeredBySubstitutionId` links this alternative to
+	 *  the specific ingredient swap that necessitates it, when there is one — see `linkedSubstitutionFor`. */
+	async function proposeStepAlternative(
 		stepId: string,
 		text: string,
 		requiresEquipment: string[],
-		durationMinutes: number | null
-	) {
-		sessionStepAlternativesStore.propose(recipe.id, {
-			id: crypto.randomUUID(),
+		durationMinutes: number | null,
+		triggeredBySubstitutionId?: string
+	): Promise<boolean> {
+		const result = await postJson('/api/step-alternatives', {
 			forStepId: stepId,
 			text,
 			requiresEquipment: requiresEquipment.length > 0 ? requiresEquipment : undefined,
 			durationMinutes: durationMinutes ?? undefined,
+			triggeredBySubstitutionId
+		});
+		if (!result) return false;
+		sessionStepAlternativesStore.propose(recipe.id, {
+			id: result.id,
+			forStepId: stepId,
+			text,
+			requiresEquipment: requiresEquipment.length > 0 ? requiresEquipment : undefined,
+			durationMinutes: durationMinutes ?? undefined,
+			triggeredBySubstitutionId,
 			source: 'community',
 			proposedBy: currentUserRef()
 		});
+		return true;
+	}
+
+	/**
+	 * The ingredient swap "in effect" for a step right now, if any — the first of the step's own
+	 * ingredients that currently has a substitution chosen. Used two ways: as the implicit link a
+	 * freshly-proposed step alternative gets attributed to (propose one while a swap is active and
+	 * it's automatically "the step change for that swap," no separate picker needed), and to look
+	 * up whether the community already logged one (`suggestedAlternativeFor`). A step with more than
+	 * one actively-swapped ingredient just takes the first match — a real, small simplification, not
+	 * a case this app's own recipes currently exercise (no step here uses two substitutable
+	 * ingredients from two different swaps at once).
+	 */
+	function linkedSubstitutionFor(step: Step): string | undefined {
+		for (const ingredientId of step.ingredientIds) {
+			const subId = chosenSubstitutions[ingredientId];
+			if (subId) return subId;
+		}
+		return undefined;
+	}
+
+	/** An already-proposed StepAlternative that exists specifically because of the swap currently
+	 *  active on this step, if the community has already logged one — surfaced as a one-click
+	 *  suggestion rather than applied automatically (CLAUDE.md's own "never silently change what a
+	 *  cook is looking at mid-recipe" discipline, same reasoning stepAlternative.usingAlternative's
+	 *  equipment-driven auto-swap already documents choosing NOT to extend to this case). */
+	function suggestedAlternativeFor(step: Step): StepAlternative | undefined {
+		const activeSubId = linkedSubstitutionFor(step);
+		if (!activeSubId) return undefined;
+		return alternativesFor(step.id).find((a) => a.triggeredBySubstitutionId === activeSubId);
+	}
+
+	/** Resolves a substitution id to its own name/data for display — searches both the loaded
+	 *  fixture data and this session's own freshly-proposed substitutions, since a `StepAlternative`
+	 *  can be triggered by either. No single global substitution index exists on this page (each
+	 *  ingredient owns its own list), so this is a real, if small, linear scan. */
+	function findSubstitutionById(id: string): Substitution | undefined {
+		for (const ingredient of recipe.ingredients) {
+			const found = (ingredient.substitutions ?? []).find((s) => s.id === id);
+			if (found) return found;
+		}
+		return sessionSubstitutions.find((s) => s.id === id);
 	}
 
 	function chooseStepAlternative(stepId: string, altId: string | null) {
@@ -157,9 +234,13 @@
 		showTranslateModal = false;
 	}
 
-	// Module 4's write-side (CLAUDE.md 4.4) — session-only comments layered on top of the mock
-	// fixture's own, same "addedX, merged with the loaded data" pattern used throughout this app's
-	// P1 build. Reset whenever the viewed recipe changes, not kept across navigations.
+	// Module 4's write-side (CLAUDE.md 4.4) — real POST /api/comments now (Session 22; previously a
+	// pure client-side push under the same "session-only" framing every other write-side feature in
+	// this app used to carry, which turned out to mean these comments never reached D1 at all — a
+	// real gap only found by auditing whether "discussable" was actually true). Layered as "addedX,
+	// merged with the loaded data" on top of `recipe.comments` for the same reason `sessionSubstitutions`
+	// is above: a real reload picks the new row up through the normal server load either way, this
+	// is just what makes it show up without one. Still reset whenever the viewed recipe changes.
 	let sessionComments = $state<NodeComment[]>([]);
 	$effect(() => {
 		recipe.id;
@@ -172,11 +253,18 @@
 		return allComments.filter((c) => c.target.type === type && c.target.id === id);
 	}
 
-	function addComment(type: NodeType, id: string, content: string, visibility: 'public' | 'private') {
+	async function addComment(
+		type: NodeType,
+		id: string,
+		content: string,
+		visibility: 'public' | 'private'
+	): Promise<boolean> {
+		const result = await postJson('/api/comments', { recipeId: recipe.id, targetType: type, targetId: id, content, visibility });
+		if (!result) return false;
 		sessionComments = [
 			...sessionComments,
 			{
-				id: crypto.randomUUID(),
+				id: result.id,
 				target: { type, id },
 				content,
 				visibility,
@@ -184,6 +272,7 @@
 				createdAt: new Date().toISOString()
 			}
 		];
+		return true;
 	}
 
 	function chooseSubstitution(ingredientId: string, substitutionId: string | null) {
@@ -196,6 +285,46 @@
 	}
 </script>
 
+<!-- `authStore.hydrate()` is fire-and-forget async (auth.svelte.ts's own doc comment) — `isAuthenticated`
+     starts false and only flips true once the real session check resolves. Guarding on `hydrated`
+     first here (and at every other `isAuthenticated` gate below) avoids the false "please log in"
+     flash a genuinely logged-in visitor would otherwise see for that split second, the same
+     discipline `/recipes/new` already established for its own composer gate. -->
+{#snippet loginPrompt()}
+	{#if authStore.hydrated}
+		<p class="login-prompt">
+			{t('comment.loginRequired')}
+			<a href={`/login?redirectTo=${encodeURIComponent(`/recipes/${recipe.id}`)}`}>{t('comment.loginLink')}</a>
+		</p>
+	{/if}
+{/snippet}
+
+<!-- Reused for both Substitutions and StepAlternatives (Session 22) — the node types this app's
+     own type system already named (`NodeType` includes 'substitution'/'step_alternative') but
+     whose comment threads the UI never actually rendered until now. Collapsed by default, unlike
+     the always-visible ingredient/step threads below it: this renders once per swap-list ROW, and
+     a recipe with several proposed alternatives per ingredient would otherwise show that many full
+     threads open at once. -->
+{#snippet discussionThread(targetType: NodeType, targetId: string, targetLabel: string)}
+	{@const threadComments = commentsFor(targetType, targetId)}
+	<details class="discussion">
+		<summary>{t('comment.discussionToggle', { n: threadComments.length })}</summary>
+		{#each threadComments as comment (comment.id)}
+			<CommentItem
+				{comment}
+				context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel }}
+			/>
+		{/each}
+		{#if authStore.hydrated && authStore.isAuthenticated}
+			<CommentComposer
+				onsubmit={(content, visibility) => addComment(targetType, targetId, content, visibility)}
+			/>
+		{:else}
+			{@render loginPrompt()}
+		{/if}
+	</details>
+{/snippet}
+
 <svelte:head>
 	<title>{resolved.fields.name} — Foodia</title>
 </svelte:head>
@@ -203,6 +332,7 @@
 <a href="/" class="back">&larr; {t('recipe.back')}</a>
 
 <h1>{resolved.fields.name}</h1>
+<a class="author-link" href={`/users/${recipe.author.id}`}>{t('recipe.byAuthor', { author: recipe.author.displayName })}</a>
 <p class="summary">{resolved.fields.summary}</p>
 <p class="lede">{resolved.fields.description}</p>
 
@@ -270,14 +400,25 @@
 								     allergy-filtered by `substitutionsFor` before it ever reaches this list — the
 								     guardrail never depends on this markup remembering to check it. -->
 								{#each sortSubstitutionsByReaction(visibleSubs) as sub (sub.id)}
-									<li class="swap-row">
-										<button class="swap-choose" onclick={() => chooseSubstitution(ingredient.id, sub.id)}>
-											{sub.name}
-											{#if substitutionModerationStore.isRecognized(sub.id)}
-												<span class="recognized-badge" title={t('moderation.recognizedBadge')}>⭐</span>
-											{/if}
-										</button>
-										<ReactionButtons reactions={sub.reactions} compact />
+									<li class="swap-row swap-row--column">
+										<div class="swap-row__main">
+											<button class="swap-choose" onclick={() => chooseSubstitution(ingredient.id, sub.id)}>
+												{sub.name}
+												{#if substitutionModerationStore.isRecognized(sub.id)}
+													<span class="recognized-badge" title={t('moderation.recognizedBadge')}>⭐</span>
+												{/if}
+											</button>
+											<ReactionButtons reactions={sub.reactions} compact />
+										</div>
+										{#if sub.proposedBy}
+											<a class="proposed-by" href={`/users/${sub.proposedBy.id}`}>
+												{t('substitution.proposedBy', { name: sub.proposedBy.displayName })}
+											</a>
+										{/if}
+										<!-- The ask this closes: "alternatives to certain ingredients need to be able
+										     to be discussed by users" — each swap option gets its own real thread, not
+										     just the parent ingredient's. -->
+										{@render discussionThread('substitution', sub.id, sub.name)}
 									</li>
 								{/each}
 							</ul>
@@ -285,9 +426,13 @@
 					{/if}
 				</div>
 				{#if ingredient.substitutable}
-					<SubstitutionComposer
-						onsubmit={(name, ratio) => proposeSubstitution(ingredient.id, name, ratio)}
-					/>
+					{#if authStore.hydrated && authStore.isAuthenticated}
+						<SubstitutionComposer
+							onsubmit={(name, ratio) => proposeSubstitution(ingredient.id, name, ratio)}
+						/>
+					{:else}
+						{@render loginPrompt()}
+					{/if}
 				{/if}
 				{#each commentsFor('ingredient', ingredient.id) as comment (comment.id)}
 					<CommentItem
@@ -295,9 +440,13 @@
 						context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel: ingredient.name }}
 					/>
 				{/each}
-				<CommentComposer
-					onsubmit={(content, visibility) => addComment('ingredient', ingredient.id, content, visibility)}
-				/>
+				{#if authStore.hydrated && authStore.isAuthenticated}
+					<CommentComposer
+						onsubmit={(content, visibility) => addComment('ingredient', ingredient.id, content, visibility)}
+					/>
+				{:else}
+					{@render loginPrompt()}
+				{/if}
 			</li>
 		{/each}
 	</ul>
@@ -312,6 +461,8 @@
 			{@const chosenAlt = visibleAlts.find((a) => a.id === chosenAltId)}
 			{@const needsAlt = stepNeedsAlternative(step, hardware)}
 			{@const missing = missingEquipmentLabel(step.requiresEquipment ?? [], hardware)}
+			{@const activeSubId = linkedSubstitutionFor(step)}
+			{@const suggestedAlt = !chosenAlt ? suggestedAlternativeFor(step) : undefined}
 			<li class="step">
 				{#if chosenAlt}
 					<span>{chosenAlt.text}</span>
@@ -336,6 +487,18 @@
 						>⏲ {chosenAlt?.durationMinutes ?? step.durationMinutes} min</span
 					>
 				{/if}
+				<!-- The other half of the ask: "a change of ingredient might induce a change of steps" —
+				     once the community has logged a step change FOR the swap you just picked, offer it
+				     as a one-click suggestion rather than silently rewriting the step under you. -->
+				{#if suggestedAlt}
+					{@const suggestedSub = findSubstitutionById(activeSubId ?? '')}
+					<div class="swap-suggestion">
+						<span>{t('stepAlternative.suggestedForSwap', { name: suggestedSub?.name ?? '' })} {suggestedAlt.text}</span>
+						<button type="button" class="btn btn--small btn--primary" onclick={() => chooseStepAlternative(step.id, suggestedAlt.id)}>
+							{t('stepAlternative.applySuggestion')}
+						</button>
+					</div>
+				{/if}
 				{#if visibleAlts.length > 0}
 					<details class="swap">
 						<summary>{t('stepAlternative.browseHeading', { n: visibleAlts.length })}</summary>
@@ -348,34 +511,55 @@
 								</li>
 							{/if}
 							{#each sortAlternativesByReaction(visibleAlts) as alt (alt.id)}
-								<li class="swap-row">
-									<button class="swap-choose" onclick={() => chooseStepAlternative(step.id, alt.id)}>
-										{alt.text}
-										<span class="muted">
-											— {alt.requiresEquipment?.length
-												? alt.requiresEquipment.join(', ')
-												: t('stepAlternative.noEquipmentNeeded')}
-										</span>
-									</button>
-									<ReactionButtons reactions={alt.reactions} compact />
+								{@const linkedSub = alt.triggeredBySubstitutionId ? findSubstitutionById(alt.triggeredBySubstitutionId) : undefined}
+								<li class="swap-row swap-row--column">
+									<div class="swap-row__main">
+										<button class="swap-choose" onclick={() => chooseStepAlternative(step.id, alt.id)}>
+											{alt.text}
+											<span class="muted">
+												— {alt.requiresEquipment?.length
+													? alt.requiresEquipment.join(', ')
+													: t('stepAlternative.noEquipmentNeeded')}
+											</span>
+										</button>
+										<ReactionButtons reactions={alt.reactions} compact />
+									</div>
+									{#if linkedSub}
+										<span class="linked-badge">{t('stepAlternative.linkedToSwap', { name: linkedSub.name })}</span>
+									{/if}
+									{#if alt.proposedBy}
+										<a class="proposed-by" href={`/users/${alt.proposedBy.id}`}>
+											{t('substitution.proposedBy', { name: alt.proposedBy.displayName })}
+										</a>
+									{/if}
+									{@render discussionThread('step_alternative', alt.id, alt.text)}
 								</li>
 							{/each}
 						</ul>
 					</details>
 				{/if}
-				<StepAlternativeComposer
-					onsubmit={(text, requiresEquipment, durationMinutes) =>
-						proposeStepAlternative(step.id, text, requiresEquipment, durationMinutes)}
-				/>
+				{#if authStore.hydrated && authStore.isAuthenticated}
+					<StepAlternativeComposer
+						toggleLabel={activeSubId ? t('stepAlternative.proposeForSwapToggle') : undefined}
+						onsubmit={(text, requiresEquipment, durationMinutes) =>
+							proposeStepAlternative(step.id, text, requiresEquipment, durationMinutes, activeSubId)}
+					/>
+				{:else}
+					{@render loginPrompt()}
+				{/if}
 				{#each commentsFor('step', step.id) as comment (comment.id)}
 					<CommentItem
 						{comment}
 						context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel: t('moderation.stepLabel', { n: step.order }) }}
 					/>
 				{/each}
-				<CommentComposer
-					onsubmit={(content, visibility) => addComment('step', step.id, content, visibility)}
-				/>
+				{#if authStore.hydrated && authStore.isAuthenticated}
+					<CommentComposer
+						onsubmit={(content, visibility) => addComment('step', step.id, content, visibility)}
+					/>
+				{:else}
+					{@render loginPrompt()}
+				{/if}
 			</li>
 		{/each}
 	</ol>
@@ -387,6 +571,16 @@
 		margin-bottom: var(--space-3);
 		color: var(--text-secondary);
 		text-decoration: none;
+	}
+	.author-link {
+		display: inline-block;
+		font-size: 13px;
+		color: var(--text-secondary);
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
+		}
 	}
 	.summary {
 		font-size: 15px;
@@ -457,6 +651,62 @@
 		justify-content: space-between;
 		gap: var(--space-2);
 		padding: var(--space-1) 0;
+	}
+	.swap-row--column {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.swap-row__main {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+	.discussion {
+		margin-top: var(--space-1);
+		font-size: 12px;
+
+		summary {
+			cursor: pointer;
+			color: var(--text-secondary);
+		}
+	}
+	.linked-badge {
+		margin-top: 2px;
+		font-size: 11px;
+		color: var(--text-secondary);
+	}
+	.proposed-by {
+		margin-top: 2px;
+		font-size: 11px;
+		color: var(--text-secondary);
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
+		}
+	}
+	.login-prompt {
+		margin: var(--space-1) 0 0;
+		padding-left: var(--space-3);
+		font-size: 12px;
+		color: var(--text-secondary);
+
+		a {
+			color: var(--accent);
+		}
+	}
+	.swap-suggestion {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+		align-self: stretch;
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-card);
+		background: var(--bg-surface-alt);
+		font-size: 12px;
 	}
 	.swap-choose {
 		background: none;

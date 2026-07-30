@@ -164,11 +164,22 @@ const pl = {
 	'shopping.export.header': 'Lista zakupów — tydzień od {weekStart}',
 	'shopping.export.allCoveredText': 'Wszystko masz już w spiżarni!',
 
+	'recipe.byAuthor': 'autor: {author}',
+
+	'userProfile.recipesHeading': 'Przepisy ({n})',
+	'userProfile.noRecipes': 'Ten użytkownik nie opublikował jeszcze żadnego przepisu.',
+	'userProfile.moderatorBadge': 'Moderator',
+	'userProfile.myProfileLink': 'Mój profil',
+
 	'comment.addToggle': '💬 Dodaj komentarz',
 	'comment.placeholder': 'Np. Zamiast 2 ząbków czosnku dajcie 4, wychodzi lepiej...',
 	'comment.privateLabel': 'Tylko dla mnie (prywatna notatka)',
 	'comment.cancel': 'Anuluj',
 	'comment.add': 'Dodaj',
+	'comment.postError': 'Nie udało się dodać komentarza. Spróbuj ponownie.',
+	'comment.loginRequired': 'Musisz być zalogowana(y), żeby dołączyć do dyskusji.',
+	'comment.loginLink': 'Zaloguj się →',
+	'comment.discussionToggle': '💬 Dyskusja ({n})',
 
 	'hardware.equipmentMatch': 'Idealne do Twojego {equipment}',
 	'hardware.oven': 'piekarnika',
@@ -182,6 +193,8 @@ const pl = {
 	'translation.viewOriginal': 'Zobacz oryginał',
 	'translation.shownIn': 'Pokazano w wersji: {locale} · autor: {author}',
 	'translation.suggestedRevisionBy': 'Sugerowana poprawka oryginału · autor: {author}',
+	'translation.shownInPrefix': 'Pokazano w wersji: {locale} · autor:',
+	'translation.suggestedRevisionByPrefix': 'Sugerowana poprawka oryginału · autor:',
 	'translation.availableVersions': 'Dostępne wersje ({n})',
 	'translation.originalLabel': 'Oryginał ({locale})',
 	'translation.suggest': '🌍 Zaproponuj tłumaczenie / poprawkę',
@@ -203,6 +216,8 @@ const pl = {
 	'substitution.proposeToggle': '+ Zaproponuj zamiennik',
 	'substitution.namePlaceholder': 'np. mleko owsiane',
 	'substitution.ratioLabel': 'Mnożnik ilości',
+	'substitution.postError': 'Nie udało się zapisać zamiennika. Spróbuj ponownie.',
+	'substitution.proposedBy': 'Zaproponował(a): {name}',
 
 	'stepAlternative.proposeToggle': '+ Zaproponuj alternatywną metodę',
 	'stepAlternative.textPlaceholder': 'Opisz, jak zrobić ten krok bez tego sprzętu...',
@@ -216,6 +231,11 @@ const pl = {
 	'stepAlternative.noEquipmentNeeded': 'bez specjalnego sprzętu',
 	'stepAlternative.noneUsable':
 		'Żadna z proponowanych alternatyw nie pasuje do Twojego sprzętu — pokazano oryginalny krok.',
+	'stepAlternative.postError': 'Nie udało się zapisać alternatywy. Spróbuj ponownie.',
+	'stepAlternative.linkedToSwap': '🔗 Ten krok zmienia się z powodu zamiennika: {name}',
+	'stepAlternative.suggestedForSwap': '🔁 Skoro zamieniono na „{name}", ten krok też mógłby się zmienić:',
+	'stepAlternative.applySuggestion': 'Zastosuj',
+	'stepAlternative.proposeForSwapToggle': '+ Zaproponuj zmianę kroku dla tego zamiennika',
 
 	'auth.emailLabel': 'Email',
 	'auth.passwordLabel': 'Hasło',
@@ -487,11 +507,22 @@ const en = {
 	'shopping.export.header': 'Shopping list — week of {weekStart}',
 	'shopping.export.allCoveredText': 'You already have everything in your pantry!',
 
+	'recipe.byAuthor': 'by {author}',
+
+	'userProfile.recipesHeading': 'Recipes ({n})',
+	'userProfile.noRecipes': "This user hasn't published any recipes yet.",
+	'userProfile.moderatorBadge': 'Moderator',
+	'userProfile.myProfileLink': 'My profile',
+
 	'comment.addToggle': '💬 Add a comment',
 	'comment.placeholder': "E.g. Use 4 cloves of garlic instead of 2, it's better...",
 	'comment.privateLabel': 'Just for me (private note)',
 	'comment.cancel': 'Cancel',
 	'comment.add': 'Add',
+	'comment.postError': 'Could not post your comment. Please try again.',
+	'comment.loginRequired': 'You need to be logged in to join the discussion.',
+	'comment.loginLink': 'Log in →',
+	'comment.discussionToggle': '💬 Discussion ({n})',
 
 	'hardware.equipmentMatch': 'Perfect for your {equipment}',
 	'hardware.oven': 'oven',
@@ -505,6 +536,8 @@ const en = {
 	'translation.viewOriginal': 'View original',
 	'translation.shownIn': 'Shown in: {locale} · by {author}',
 	'translation.suggestedRevisionBy': 'Suggested revision of the original · by {author}',
+	'translation.shownInPrefix': 'Shown in: {locale} · by',
+	'translation.suggestedRevisionByPrefix': 'Suggested revision of the original · by',
 	'translation.availableVersions': 'Available versions ({n})',
 	'translation.originalLabel': 'Original ({locale})',
 	'translation.suggest': '🌍 Suggest a translation / improvement',
@@ -526,6 +559,8 @@ const en = {
 	'substitution.proposeToggle': '+ Propose a substitution',
 	'substitution.namePlaceholder': 'e.g. oat milk',
 	'substitution.ratioLabel': 'Quantity multiplier',
+	'substitution.postError': 'Could not save your substitution. Please try again.',
+	'substitution.proposedBy': 'Proposed by: {name}',
 
 	'stepAlternative.proposeToggle': '+ Propose an alternative method',
 	'stepAlternative.textPlaceholder': "Describe how to do this step without that equipment...",
@@ -539,6 +574,11 @@ const en = {
 	'stepAlternative.noEquipmentNeeded': 'no special equipment',
 	'stepAlternative.noneUsable':
 		"None of the proposed alternatives match your equipment — showing the original step.",
+	'stepAlternative.postError': 'Could not save your alternative. Please try again.',
+	'stepAlternative.linkedToSwap': '🔗 This step changes because of the swap: {name}',
+	'stepAlternative.suggestedForSwap': '🔁 Since you swapped in "{name}", this step could change too:',
+	'stepAlternative.applySuggestion': 'Apply',
+	'stepAlternative.proposeForSwapToggle': '+ Propose a step change for this swap',
 
 	'auth.emailLabel': 'Email',
 	'auth.passwordLabel': 'Password',

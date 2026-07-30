@@ -22,16 +22,18 @@
 </script>
 
 {#if !resolved.isOriginal && resolved.translation}
+	{@const translator = resolved.translation.translatedBy}
 	<div class="translation-status">
+		<!-- Split into a prefix/link pair instead of one flattened `t()` call — the only way to make
+		     the translator's own name a real link (Session 22) without breaking the sentence's own
+		     translated phrasing into two separately-maintained half-strings per locale. -->
 		<span>
 			{#if resolved.isSameLocaleSuggestion}
-				{t('translation.suggestedRevisionBy', { author: resolved.translation.translatedBy.displayName })}
+				{t('translation.suggestedRevisionByPrefix')}
 			{:else}
-				{t('translation.shownIn', {
-					locale: localeName(resolved.locale),
-					author: resolved.translation.translatedBy.displayName
-				})}
+				{t('translation.shownInPrefix', { locale: localeName(resolved.locale) })}
 			{/if}
+			<a href={`/users/${translator.id}`}>{translator.displayName}</a>
 		</span>
 		<button type="button" class="btn btn--ghost btn--small" onclick={() => onselect('original')}>
 			{t('translation.viewOriginal')}

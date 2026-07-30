@@ -70,12 +70,12 @@
 					<li class="queue-item">
 						<p class="queue-item__content">"{report.commentContent}"</p>
 						<p class="queue-item__meta">
-							{report.commentAuthor.displayName} ·
+							<a href={`/users/${report.commentAuthor.id}`}>{report.commentAuthor.displayName}</a> ·
 							{t('moderation.onRecipeLabel')}
 							{report.recipeName} — {report.targetLabel} ·
 							{t('moderation.reportReasonLabel')}: {reportReasonLabel(report.reason)} ·
 							{t('moderation.reportedByLabel')}
-							{report.reportedBy.displayName}
+							<a href={`/users/${report.reportedBy.id}`}>{report.reportedBy.displayName}</a>
 						</p>
 						<div class="queue-item__actions">
 							<button
@@ -112,7 +112,7 @@
 							{entry.recipeName} — {entry.ingredientName} ·
 							{t('moderation.netScore', { n: netReactionScore(entry.sub.reactions) })}
 							{#if entry.sub.proposedBy}
-								· {entry.sub.proposedBy.displayName}
+								· <a href={`/users/${entry.sub.proposedBy.id}`}>{entry.sub.proposedBy.displayName}</a>
 							{/if}
 						</p>
 						<div class="queue-item__actions">

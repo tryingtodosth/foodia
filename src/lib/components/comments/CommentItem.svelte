@@ -49,7 +49,7 @@
 	<p class="node-comment" class:private={comment.visibility === 'private'}>
 		<span class="node-comment__head">
 			{comment.visibility === 'private' ? '🔒' : '💬'}
-			<strong>{comment.author.displayName}:</strong>
+			<strong><a href={`/users/${comment.author.id}`}>{comment.author.displayName}</a>:</strong>
 		</span>
 		{comment.content}
 		{#if comment.visibility === 'public'}
