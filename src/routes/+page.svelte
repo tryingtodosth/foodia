@@ -2,7 +2,9 @@
 	import RecipeCard from '$lib/components/recipe/RecipeCard.svelte';
 	import FacetFilterPanel from '$lib/components/search/FacetFilterPanel.svelte';
 	import { profileStore } from '$lib/state/profile.svelte';
+	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { isRecipeCookable } from '$lib/utils/cookability';
+	import { filterByUiLocale } from '$lib/utils/recipeLocale';
 	import {
 		emptyRecipeFilters,
 		filterRecipes,
@@ -16,14 +18,19 @@
 
 	let { data }: { data: PageData } = $props();
 
+	// Session 24 — "when English is active, show only English recipes": the interface language
+	// IS the recipe-language filter here, applied first, ahead of every other narrowing below (so
+	// facet options never offer a tag that only exists on a recipe in the other language).
+	let localeRecipes = $derived(filterByUiLocale(data.recipes, uiLocaleStore.locale));
+
 	// Search, Filtering & Categorization (CLAUDE.md 4.7) — page-local $state, same "no new data
 	// model, purely session-local UI state" treatment `/plan`'s own local drafts already get.
-	// Options are derived from the FULL, unfiltered corpus (not narrowed by the hardware filter or
-	// by each other) — a simpler, "options never shrink" choice, same one 2do's own facet pickers
-	// make.
+	// Options are derived from the locale-filtered corpus (not narrowed by the hardware filter or
+	// by each other) — a simpler, "options never shrink beyond the language filter" choice, same
+	// one 2do's own facet pickers make for their own unfiltered base.
 	let filters = $state(emptyRecipeFilters());
-	let tagOptions = $derived(distinctValues(data.recipes, 'tags'));
-	let dietFlagOptions = $derived(distinctValues(data.recipes, 'dietFlags'));
+	let tagOptions = $derived(distinctValues(localeRecipes, 'tags'));
+	let dietFlagOptions = $derived(distinctValues(localeRecipes, 'dietFlags'));
 
 	// The hardware hard-filter (CLAUDE.md 4.1) — client-only, since the profile itself is
 	// client-only (no backend session yet, see Section 7's own note on this). Before hydration
@@ -37,8 +44,8 @@
 	// lib/utils/cookability.ts's own doc comment for exactly how recipe-level-only equipment
 	// (e.g. overnightOats' kitchenScale, not attributable to any single step) stays a hard block.
 	let hardware = $derived(profileStore.profile?.hardware ?? null);
-	let cookableRecipes = $derived(data.recipes.filter((r) => isRecipeCookable(r, hardware)));
-	let hiddenCount = $derived(data.recipes.length - cookableRecipes.length);
+	let cookableRecipes = $derived(localeRecipes.filter((r) => isRecipeCookable(r, hardware)));
+	let hiddenCount = $derived(localeRecipes.length - cookableRecipes.length);
 	// The facet filters narrow further, applied AFTER the hardware hard-filter — a recipe hidden
 	// for lacking equipment stays hidden regardless of what's selected here.
 	let visibleRecipes = $derived(filterRecipes(cookableRecipes, filters));

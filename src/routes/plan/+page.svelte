@@ -5,6 +5,7 @@
 	import { profileStore } from '$lib/state/profile.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { isRecipeCookable } from '$lib/utils/cookability';
+	import { filterByUiLocale } from '$lib/utils/recipeLocale';
 	import { toISODate, mondayOf, addDays, weekDates, weekdayLabel, formatShortDate } from '$lib/utils/week';
 	import { t } from '$lib/i18n/t';
 	import type { MealSlotKind } from '$lib/types/pantry';
@@ -94,7 +95,11 @@
 	// someone plan a recipe into their week that their kitchen can't actually make. Session 9 —
 	// same equipment-alternative-aware reconciliation the home feed uses, see cookability.ts.
 	let hardware = $derived(profileStore.profile?.hardware ?? null);
-	let availableRecipes = $derived(data.recipes.filter((r) => isRecipeCookable(r, hardware)));
+	// Session 24 — "when English is active, show only English recipes," applied here too: the
+	// weekly picker shouldn't offer a recipe the cook can't even read alongside ones they can.
+	let availableRecipes = $derived(
+		filterByUiLocale(data.recipes, uiLocaleStore.locale).filter((r) => isRecipeCookable(r, hardware))
+	);
 
 	function recipeById(id: string): RecipeCard | undefined {
 		return data.recipes.find((r) => r.id === id);

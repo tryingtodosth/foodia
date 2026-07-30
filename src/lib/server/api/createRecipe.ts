@@ -74,7 +74,7 @@ export async function createRecipe(db: Db, authorId: string, input: CreateRecipe
 		carbsG: input.macros.carbsG,
 		upCount: 0,
 		downCount: 0,
-		sourceLocale: 'pl',
+		sourceLocale: input.sourceLocale?.trim() || 'pl',
 		createdAt: now,
 		updatedAt: now
 	});

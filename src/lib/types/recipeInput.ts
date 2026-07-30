@@ -36,4 +36,11 @@ export interface CreateRecipeInput {
 	macros: { kcal: number; proteinG: number; fatG: number; carbsG: number };
 	ingredients: CreateRecipeIngredientInput[];
 	steps: CreateRecipeStepInput[];
+	/** Session 24 — the language this recipe is actually authored in. Optional, defaults to `'pl'`
+	 *  server-side (see `createRecipe.ts`): every recipe this app has ever created through this
+	 *  endpoint before now genuinely was Polish, so an absent value staying Polish is the honest
+	 *  default, not an arbitrary one. The Composer UI doesn't expose this yet (a real, stated gap —
+	 *  it has no language picker), so it only ever sends the default; real English content this
+	 *  session imports directly against the API sets it explicitly. */
+	sourceLocale?: string;
 }
