@@ -319,8 +319,6 @@
 			<CommentComposer
 				onsubmit={(content, visibility) => addComment(targetType, targetId, content, visibility)}
 			/>
-		{:else}
-			{@render loginPrompt()}
 		{/if}
 	</details>
 {/snippet}
@@ -362,6 +360,16 @@
 </div>
 
 <a class="cook-cta" href={`/recipes/${recipe.id}/cook`}>▶ {t('recipe.cookCta')}</a>
+
+<!-- One prompt for the whole page, not one per composer (this page's original per-gate version —
+     one `{@render loginPrompt()}` at every propose/comment composer, including inside each
+     substitution/step-alternative's own discussion thread — showed this same sentence up to 22
+     times on a single real recipe, 7 ingredients + 4 steps × 2 composers each, a real bug a live
+     user caught, not a hypothetical). Every composer below (including inside `discussionThread`)
+     now just renders nothing at all when unauthenticated instead of its own copy of this message. -->
+{#if authStore.hydrated && !authStore.isAuthenticated}
+	{@render loginPrompt()}
+{/if}
 
 <section>
 	<h2>{t('recipe.ingredientsHeading')}</h2>
@@ -425,14 +433,10 @@
 						</details>
 					{/if}
 				</div>
-				{#if ingredient.substitutable}
-					{#if authStore.hydrated && authStore.isAuthenticated}
-						<SubstitutionComposer
-							onsubmit={(name, ratio) => proposeSubstitution(ingredient.id, name, ratio)}
-						/>
-					{:else}
-						{@render loginPrompt()}
-					{/if}
+				{#if ingredient.substitutable && authStore.hydrated && authStore.isAuthenticated}
+					<SubstitutionComposer
+						onsubmit={(name, ratio) => proposeSubstitution(ingredient.id, name, ratio)}
+					/>
 				{/if}
 				{#each commentsFor('ingredient', ingredient.id) as comment (comment.id)}
 					<CommentItem
@@ -444,8 +448,6 @@
 					<CommentComposer
 						onsubmit={(content, visibility) => addComment('ingredient', ingredient.id, content, visibility)}
 					/>
-				{:else}
-					{@render loginPrompt()}
 				{/if}
 			</li>
 		{/each}
@@ -544,8 +546,6 @@
 						onsubmit={(text, requiresEquipment, durationMinutes) =>
 							proposeStepAlternative(step.id, text, requiresEquipment, durationMinutes, activeSubId)}
 					/>
-				{:else}
-					{@render loginPrompt()}
 				{/if}
 				{#each commentsFor('step', step.id) as comment (comment.id)}
 					<CommentItem
@@ -557,8 +557,6 @@
 					<CommentComposer
 						onsubmit={(content, visibility) => addComment('step', step.id, content, visibility)}
 					/>
-				{:else}
-					{@render loginPrompt()}
 				{/if}
 			</li>
 		{/each}
@@ -687,13 +685,16 @@
 		}
 	}
 	.login-prompt {
-		margin: var(--space-1) 0 0;
-		padding-left: var(--space-3);
-		font-size: 12px;
+		margin: var(--space-1) 0;
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-card);
+		background: var(--bg-surface-alt);
+		font-size: 13px;
 		color: var(--text-secondary);
 
 		a {
 			color: var(--accent);
+			font-weight: 600;
 		}
 	}
 	.swap-suggestion {
