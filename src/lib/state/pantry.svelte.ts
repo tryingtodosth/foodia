@@ -67,9 +67,24 @@ export const pantryStore = {
 		persist();
 	},
 	/** "Odklikuje to, co zużyła" (CLAUDE.md 4.5) — P1 has no MealPlan to reconcile against, so
-	 *  using an item up just removes it from the checklist rather than decrementing a quantity. */
-	markUsed(id: string): void {
+	 *  using an item up just removes it from the checklist rather than decrementing a quantity.
+	 *  Returns the removed row (or `null` if the id was already gone) so the caller can offer a
+	 *  real undo — Session 24's own "easy to remove, impossible to add back" gap, closed by giving
+	 *  the page something real to restore rather than just a bare id. */
+	markUsed(id: string): PantryItem | null {
+		const removed = items.find((item) => item.id === id) ?? null;
+		if (!removed) return null;
 		items = items.filter((item) => item.id !== id);
+		persist();
+		return removed;
+	},
+	/** Puts a just-removed row back exactly as it was — not routed through `add()`'s own
+	 *  merge-by-(name, unit) logic, which is for genuinely NEW quantities being logged, not for
+	 *  restoring a specific row a cook only just clicked away by mistake. Idempotent: a no-op if
+	 *  that id is already present (guards against an undo firing twice, e.g. a stray double-click). */
+	restore(item: PantryItem): void {
+		if (items.some((i) => i.id === item.id)) return;
+		items = [...items, item];
 		persist();
 	}
 };

@@ -106,6 +106,8 @@ const pl = {
 	'pantry.add': 'Dodaj',
 	'pantry.empty': 'Pusto. Dodaj pierwszy składnik powyżej.',
 	'pantry.used': 'Zużyte ✓',
+	'pantry.removedToast': 'Usunięto: {name}',
+	'pantry.undo': 'Cofnij',
 
 	'plan.title': 'Plan tygodnia',
 	'plan.lede': 'Ułóż posiłki na cały tydzień — spiżarnia i lista zakupów będą liczone z tego planu.',
@@ -461,6 +463,8 @@ const en = {
 	'pantry.add': 'Add',
 	'pantry.empty': 'Empty. Add your first ingredient above.',
 	'pantry.used': 'Used ✓',
+	'pantry.removedToast': 'Removed: {name}',
+	'pantry.undo': 'Undo',
 
 	'plan.title': 'Weekly plan',
 	'plan.lede': 'Lay out meals for the whole week — the pantry and shopping list are calculated from this plan.',
