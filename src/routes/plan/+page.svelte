@@ -42,8 +42,10 @@
 		return data.recipes.find((r) => r.id === id);
 	}
 
-	function mealAt(date: string, slot: MealSlotKind) {
-		return plan.days.find((d) => d.date === date)?.meals.find((m) => m.slot === slot);
+	/** Now a list, not a single optional meal — Session 23's own "no limit on the amount of meals"
+	 *  ask means several meals can share one (date, slot) cell. */
+	function mealsAt(date: string, slot: MealSlotKind) {
+		return plan.days.find((d) => d.date === date)?.meals.filter((m) => m.slot === slot) ?? [];
 	}
 
 	// Deliberately NOT read from `plan` in the initializer — that only captures $derived's value
@@ -76,6 +78,17 @@
 		)
 	);
 	let overBudget = $derived(plan.budget !== undefined && weekTotal > plan.budget.amount);
+
+	// Same flat, not-prorated-by-servings honesty `weekTotal` above already carries — Recipe has no
+	// `baseServings` field to scale a per-serving kcal figure against, so this sums each recipe's
+	// own whole-recipe kcal once per meal, same as the cost total already does, not a fabricated
+	// more-precise number the data doesn't actually support.
+	function dayCalories(date: string): number {
+		const day = plan.days.find((d) => d.date === date);
+		if (!day) return 0;
+		return day.meals.reduce((sum, meal) => sum + (recipeById(meal.recipeId)?.macros.kcal ?? 0), 0);
+	}
+	let weekCalories = $derived(days.reduce((sum, date) => sum + dayCalories(date), 0));
 
 	let pickerTarget = $state<{ date: string; slot: MealSlotKind } | null>(null);
 
@@ -120,7 +133,7 @@
 		let runningTotal = weekTotal;
 		for (const date of days) {
 			for (const slot of ['breakfast', 'lunch', 'dinner'] as const) {
-				if (mealAt(date, slot)) continue;
+				if (mealsAt(date, slot).length > 0) continue;
 				let picked: RecipeCard | null = null;
 				for (let attempts = 0; attempts < availableRecipes.length; attempts += 1) {
 					const candidate = availableRecipes[cursor % availableRecipes.length];
@@ -180,6 +193,7 @@
 		{t('plan.sum')}: {weekTotal} PLN{#if plan.budget}
 			&nbsp;/ {plan.budget.amount} PLN{/if}
 	</span>
+	<span class="week-kcal">🔥 {t('plan.weekKcal', { n: weekCalories })}</span>
 </div>
 
 {#if overBudget}
@@ -201,49 +215,55 @@
 		<div class="plan-grid__day-head">
 			<span class="weekday">{weekdayLabel(date, uiLocaleStore.locale)}</span>
 			<span class="date">{formatShortDate(date)}</span>
+			<span class="day-kcal">🔥 {t('plan.kcal', { n: dayCalories(date) })}</span>
 		</div>
 	{/each}
 
 	{#each SLOTS as slot (slot)}
 		<div class="plan-grid__slot-head">{SLOT_LABEL[slot]}</div>
 		{#each days as date (date)}
-			{@const meal = mealAt(date, slot)}
-			{@const recipe = meal ? recipeById(meal.recipeId) : null}
+			{@const meals = mealsAt(date, slot)}
 			<div class="plan-cell">
-				{#if recipe && meal}
-					<div class="meal-chip">
-						<a href={`/recipes/${recipe.id}`} class="meal-chip__name">{recipe.name}</a>
-						<span class="meal-chip__meta">
-							{#if recipe.costEstimate}{recipe.costEstimate.amount} PLN ·{/if}
-							{recipe.timeMinutes} min
-						</span>
-						<div class="meal-chip__row">
-							<label class="servings">
-								👥
-								<input
-									type="number"
-									min="1"
-									max="10"
-									value={meal.servings}
-									onchange={(e) =>
-										mealPlanStore.updateServings(
-											weekStart,
-											date,
-											slot,
-											Number(e.currentTarget.value) || 1
-										)}
-								/>
-							</label>
-							<button class="remove" onclick={() => mealPlanStore.remove(weekStart, date, slot)}>
-								{t('plan.removeMeal')}
-							</button>
+				<!-- Session 23 — "no limit on the amount of meals in the planner": every meal in this
+				     slot gets its own chip (was a single optional one before, `{#if recipe && meal}` /
+				     `{:else}`), and the add button now always renders alongside them, not only when
+				     the cell is empty. -->
+				{#each meals as meal (meal.id)}
+					{@const recipe = recipeById(meal.recipeId)}
+					{#if recipe}
+						<div class="meal-chip">
+							<a href={`/recipes/${recipe.id}`} class="meal-chip__name">{recipe.name}</a>
+							<span class="meal-chip__meta">
+								{#if recipe.costEstimate}{recipe.costEstimate.amount} PLN ·{/if}
+								{recipe.timeMinutes} min · {recipe.macros.kcal} kcal
+							</span>
+							<div class="meal-chip__row">
+								<label class="servings">
+									👥
+									<input
+										type="number"
+										min="1"
+										max="10"
+										value={meal.servings}
+										onchange={(e) =>
+											mealPlanStore.updateServings(
+												weekStart,
+												date,
+												meal.id,
+												Number(e.currentTarget.value) || 1
+											)}
+									/>
+								</label>
+								<button class="remove" onclick={() => mealPlanStore.remove(weekStart, date, meal.id)}>
+									{t('plan.removeMeal')}
+								</button>
+							</div>
 						</div>
-					</div>
-				{:else}
-					<button class="plan-cell__add" onclick={() => openPicker(date, slot)}>
-						{t('plan.addMeal')}
-					</button>
-				{/if}
+					{/if}
+				{/each}
+				<button class="plan-cell__add" onclick={() => openPicker(date, slot)}>
+					{t('plan.addMeal')}
+				</button>
 			</div>
 		{/each}
 	{/each}
@@ -328,6 +348,10 @@
 			color: var(--status-danger);
 		}
 	}
+	.week-kcal {
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
 	.reality-check {
 		padding: var(--space-2) var(--space-3);
 		border-radius: var(--radius-card);
@@ -373,6 +397,11 @@
 			font-size: 11px;
 			color: var(--text-secondary);
 		}
+		.day-kcal {
+			font-size: 11px;
+			color: var(--text-secondary);
+			margin-top: 2px;
+		}
 	}
 	.plan-grid__slot-head {
 		background: var(--bg-surface);
@@ -388,12 +417,14 @@
 		padding: var(--space-2);
 		min-height: 64px;
 		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 	.plan-cell__add {
-		flex: 1;
 		background: none;
 		border: 1px dashed var(--bg-surface-alt);
 		border-radius: var(--radius-card);
+		padding: var(--space-2);
 		color: var(--text-secondary);
 		font-size: 12px;
 		cursor: pointer;

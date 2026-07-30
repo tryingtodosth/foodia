@@ -115,6 +115,8 @@ const pl = {
 	'plan.budgetLabel': 'Budżet na tydzień (PLN)',
 	'plan.budgetPlaceholder': 'np. 150',
 	'plan.sum': 'Suma',
+	'plan.kcal': '{n} kcal',
+	'plan.weekKcal': '{n} kcal / tydzień',
 	'plan.realityCheck':
 		'⚠️ Ten tydzień kosztuje więcej niż zadeklarowany budżet. Rozważ tańsze przepisy albo zwiększ budżet.',
 	'plan.quickFill': '🎲 Szybko zapełnij tydzień',
@@ -458,6 +460,8 @@ const en = {
 	'plan.budgetLabel': 'Weekly budget (PLN)',
 	'plan.budgetPlaceholder': 'e.g. 150',
 	'plan.sum': 'Total',
+	'plan.kcal': '{n} kcal',
+	'plan.weekKcal': '{n} kcal / week',
 	'plan.realityCheck':
 		'⚠️ This week costs more than your declared budget. Consider cheaper recipes or raise your budget.',
 	'plan.quickFill': '🎲 Quick-fill the week',

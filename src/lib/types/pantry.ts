@@ -11,6 +11,11 @@ export interface PantryItem {
 export type MealSlotKind = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export interface MealSlot {
+	/** Session 23 — previously absent; `slot` alone used to BE the identity ("at most one meal per
+	 *  (date, slot)," `mealPlanStore.assign`'s own old behavior replaced whatever was already
+	 *  there). A real id is what makes "no limit on the amount of meals" possible — several meals
+	 *  can now share the same `slot` kind (two snacks, a second dinner) without colliding. */
+	id: string;
 	slot: MealSlotKind;
 	recipeId: string;
 	versionId?: string;
