@@ -38,7 +38,10 @@ export const pantryStore = {
 	add(input: { ingredientName: string; quantity: number; unit: string }): void {
 		const trimmed = input.ingredientName.trim();
 		if (!trimmed) return;
-		const unit = input.unit || 'szt';
+		// A plain state module has no UI locale to read (that's `pantry.unitDefault`, resolved by
+		// the page before this is ever called) — 'pc' is a neutral fallback for the rare direct
+		// caller that somehow supplies an empty unit, not a second, competing default to keep in sync.
+		const unit = input.unit || 'pc';
 		const key = (name: string, u: string) => `${name.trim().toLowerCase()}::${u.trim().toLowerCase()}`;
 		const targetKey = key(trimmed, unit);
 		const existing = items.find((item) => key(item.ingredientName, item.unit) === targetKey);

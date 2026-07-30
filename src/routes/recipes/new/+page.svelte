@@ -131,7 +131,7 @@
 			ingredients: cleanIngredients.map((i) => ({
 				name: i.name.trim(),
 				quantity: Number(i.quantity) || 0,
-				unit: i.unit.trim() || 'szt'
+				unit: i.unit.trim() || t('pantry.unitDefault')
 			})),
 			steps: steps
 				.filter((s) => s.text.trim())

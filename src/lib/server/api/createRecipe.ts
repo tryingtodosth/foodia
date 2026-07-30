@@ -86,7 +86,11 @@ export async function createRecipe(db: Db, authorId: string, input: CreateRecipe
 		orderIndex: index,
 		name: ing.name.trim(),
 		quantity: ing.quantity,
-		unit: ing.unit.trim() || 'szt',
+		// Server-side has no UI locale to consult (the Composer already sends a locale-correct
+		// default via `t('pantry.unitDefault')` — this only guards a genuinely empty submission,
+		// same reasoning `pantryStore.add`'s own identical fallback gives) — 'pc' rather than a
+		// Polish-only 'szt' every recipe used to fall back to regardless of `sourceLocale`.
+		unit: ing.unit.trim() || 'pc',
 		// Defaults true, not false — a real, deliberate call, not an oversight left in. The mock
 		// fixtures mark this per-ingredient by editorial judgment (Passata pomidorowa in r1 is
 		// genuinely not substitutable), but the Composer UI has no per-ingredient control for that

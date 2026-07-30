@@ -7,13 +7,19 @@
 	// export — just the checklist itself, client-only.
 	let name = $state('');
 	let quantity = $state(1);
-	let unit = $state('szt');
+	// Session 24 — `t('pantry.unitDefault')` ('szt' in Polish, 'pc' in English), not a hardcoded
+	// Polish string every locale used to see regardless of the interface language. A one-time seed
+	// at mount (same convention `weekStart`/`budgetInput` already use elsewhere), not a live
+	// $effect tied to the language switch — this field is freely editable, and clobbering whatever
+	// someone already typed the moment they switch languages would be worse than a field that
+	// simply started in the "wrong" language for the rest of that one visit.
+	let unit = $state(t('pantry.unitDefault'));
 
 	function addItem() {
 		pantryStore.add({ ingredientName: name, quantity, unit });
 		name = '';
 		quantity = 1;
-		unit = 'szt';
+		unit = t('pantry.unitDefault');
 	}
 
 	// Session 24 — "easy to remove, but impossible to add back again." Only the most recent removal
