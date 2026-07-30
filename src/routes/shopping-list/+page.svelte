@@ -23,11 +23,19 @@
 	import type { RecipeDetail } from '$lib/types/recipe';
 
 	let weekStart = $derived(page.url.searchParams.get('week') ?? toISODate(mondayOf(new Date())));
-	let plan = $derived(mealPlanStore.planFor(weekStart));
-	let weekDays = $derived([plan.days[0]?.date ?? weekStart, plan.days[6]?.date ?? weekStart]);
+	// Session 24 — a week can have several plans now, so `?week=` alone no longer picks one. A
+	// `?plan=` id (carried through from /plan's own "Shopping list" link) selects a specific one;
+	// absent that, the first plan for the week is a reasonable default rather than an error state —
+	// matches how `/plan` itself falls back when no `?plan=` was given either.
+	let planIdParam = $derived(page.url.searchParams.get('plan'));
+	let plan = $derived(
+		(planIdParam ? mealPlanStore.planById(planIdParam) : undefined) ??
+			mealPlanStore.plansForWeek(weekStart)[0]
+	);
+	let weekDays = $derived([plan?.days[0]?.date ?? weekStart, plan?.days[6]?.date ?? weekStart]);
 
 	let usedRecipeIds = $derived([
-		...new Set(plan.days.flatMap((d) => d.meals.map((m) => m.recipeId)))
+		...new Set((plan?.days ?? []).flatMap((d) => d.meals.map((m) => m.recipeId)))
 	]);
 
 	let recipesById = $state<Record<string, RecipeDetail>>({});
@@ -46,7 +54,7 @@
 		});
 	});
 
-	let aggregated = $derived(aggregateIngredients(plan, recipesById));
+	let aggregated = $derived(plan ? aggregateIngredients(plan, recipesById) : []);
 	let shoppingItems = $derived(crossReferencePantry(aggregated, pantryStore.items));
 	let missingItems = $derived(shoppingItems.filter((i) => i.missingQuantity > 0));
 	let coveredItems = $derived(shoppingItems.filter((i) => i.missingQuantity === 0 && i.pantryQuantity > 0));

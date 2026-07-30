@@ -28,9 +28,17 @@ export interface MealPlanDay {
 }
 
 export interface MealPlan {
+	/** Session 24 — previously `=== weekStart` (a week's plan WAS its own week, one to one). A real
+	 *  independent id is what "more than one weekly plan" needs: several plans can now target the
+	 *  same `weekStart` (a normal-week draft alongside a guest-week one), switchable by name. */
 	id: string;
+	/** User-facing label, e.g. "Plan A", "Tydzień z gośćmi" — plans are no longer implicitly
+	 *  identified by their week alone, so they need one. */
+	name: string;
 	userId: string;
-	weekStart: string; // ISO date, Monday
+	weekStart: string; // ISO date, Monday — which week this plan targets, not its identity anymore
 	budget?: { amount: number; currency: string };
 	days: MealPlanDay[];
+	createdAt: string;
+	updatedAt: string;
 }

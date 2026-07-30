@@ -29,8 +29,66 @@
 	let weekStart = $state(
 		untrack(() => page.url.searchParams.get('week')) ?? toISODate(mondayOf(new Date()))
 	);
-	let plan = $derived(mealPlanStore.planFor(weekStart));
 	let days = $derived(weekDates(weekStart));
+
+	// Session 24 — "allow more than 1 weekly plan": a week can now have zero, one, or several named
+	// plans, so viewing a week alone no longer determines which plan's data is on screen.
+	// `selectedPlanId` is seeded once from `?plan=` (same one-time convention `weekStart` above
+	// already uses), then re-resolved by the $effect below whenever the viewed week changes or the
+	// selected plan stops existing (deleted, or the week was just navigated away from) — falling
+	// back to the first plan for the week, or `null` if the week genuinely has none yet.
+	let selectedPlanId = $state<string | null>(untrack(() => page.url.searchParams.get('plan')));
+	let plansThisWeek = $derived(mealPlanStore.plansForWeek(weekStart));
+	$effect(() => {
+		if (!plansThisWeek.some((p) => p.id === selectedPlanId)) {
+			selectedPlanId = plansThisWeek[0]?.id ?? null;
+		}
+	});
+	let plan = $derived(selectedPlanId ? mealPlanStore.planById(selectedPlanId) : undefined);
+
+	function createPlan() {
+		const id = mealPlanStore.createPlan(weekStart, t('plan.defaultName', { n: plansThisWeek.length + 1 }));
+		selectedPlanId = id;
+	}
+
+	let renaming = $state(false);
+	let renameInput = $state('');
+	function startRename() {
+		if (!plan) return;
+		renameInput = plan.name;
+		renaming = true;
+	}
+	function saveRename() {
+		if (!plan) return;
+		const trimmed = renameInput.trim();
+		if (trimmed) mealPlanStore.renamePlan(plan.id, trimmed);
+		renaming = false;
+	}
+
+	function duplicatePlanHere() {
+		if (!plan) return;
+		const id = mealPlanStore.duplicatePlan(plan.id, t('plan.copyName', { name: plan.name }));
+		if (id) selectedPlanId = id;
+	}
+
+	let duplicateTargetWeek = $state('');
+	let showDuplicateToWeek = $state(false);
+	function duplicatePlanToWeek() {
+		if (!plan || !duplicateTargetWeek) return;
+		const targetMonday = toISODate(mondayOf(new Date(duplicateTargetWeek)));
+		const id = mealPlanStore.duplicatePlan(plan.id, t('plan.copyName', { name: plan.name }), targetMonday);
+		if (!id) return;
+		weekStart = targetMonday;
+		selectedPlanId = id;
+		showDuplicateToWeek = false;
+	}
+
+	function deletePlan() {
+		if (!plan) return;
+		if (!confirm(t('plan.deleteConfirm', { name: plan.name }))) return;
+		mealPlanStore.deletePlan(plan.id);
+		selectedPlanId = null;
+	}
 
 	// Hardware is a hard filter here too, same as the home feed (CLAUDE.md 4.1) — no point letting
 	// someone plan a recipe into their week that their kitchen can't actually make. Session 9 —
@@ -42,9 +100,10 @@
 		return data.recipes.find((r) => r.id === id);
 	}
 
-	/** Now a list, not a single optional meal — Session 23's own "no limit on the amount of meals"
-	 *  ask means several meals can share one (date, slot) cell. */
+	/** A list, not a single optional meal (Session 23) — several meals can share one (date, slot)
+	 *  cell. Empty whenever no plan is selected for this week yet. */
 	function mealsAt(date: string, slot: MealSlotKind) {
+		if (!plan) return [];
 		return plan.days.find((d) => d.date === date)?.meals.filter((m) => m.slot === slot) ?? [];
 	}
 
@@ -53,15 +112,16 @@
 	// and sets the real initial value, so starting from '' here is honest, not a placeholder.
 	let budgetInput = $state<number | string>('');
 	$effect(() => {
-		// Reset the field whenever the viewed week changes, so it never carries a stale value from
-		// a different week's own budget into this one.
-		budgetInput = mealPlanStore.planFor(weekStart).budget?.amount ?? '';
+		// Reset the field whenever the viewed plan changes, so it never carries a stale value from
+		// a different plan's own budget into this one.
+		budgetInput = plan?.budget?.amount ?? '';
 	});
 
 	function saveBudget() {
+		if (!plan) return;
 		const amount = Number(budgetInput);
 		mealPlanStore.setBudget(
-			weekStart,
+			plan.id,
 			Number.isFinite(amount) && amount > 0 ? { amount, currency: 'PLN' } : undefined
 		);
 	}
@@ -70,20 +130,26 @@
 	// field yet to prorate against, so this deliberately doesn't pretend to scale cost with portion
 	// count. Flagged honestly in CLAUDE.md rather than faking a per-serving number.
 	let weekTotal = $derived(
-		plan.days.reduce(
-			(sum, day) =>
-				sum +
-				day.meals.reduce((daySum, meal) => daySum + (recipeById(meal.recipeId)?.costEstimate?.amount ?? 0), 0),
-			0
-		)
+		plan
+			? plan.days.reduce(
+					(sum, day) =>
+						sum +
+						day.meals.reduce(
+							(daySum, meal) => daySum + (recipeById(meal.recipeId)?.costEstimate?.amount ?? 0),
+							0
+						),
+					0
+				)
+			: 0
 	);
-	let overBudget = $derived(plan.budget !== undefined && weekTotal > plan.budget.amount);
+	let overBudget = $derived(plan?.budget !== undefined && weekTotal > plan.budget.amount);
 
 	// Same flat, not-prorated-by-servings honesty `weekTotal` above already carries — Recipe has no
 	// `baseServings` field to scale a per-serving kcal figure against, so this sums each recipe's
 	// own whole-recipe kcal once per meal, same as the cost total already does, not a fabricated
 	// more-precise number the data doesn't actually support.
 	function dayCalories(date: string): number {
+		if (!plan) return 0;
 		const day = plan.days.find((d) => d.date === date);
 		if (!day) return 0;
 		return day.meals.reduce((sum, meal) => sum + (recipeById(meal.recipeId)?.macros.kcal ?? 0), 0);
@@ -99,8 +165,8 @@
 		pickerTarget = null;
 	}
 	function pickRecipe(recipeId: string) {
-		if (!pickerTarget) return;
-		mealPlanStore.assign(weekStart, pickerTarget.date, pickerTarget.slot, recipeId);
+		if (!pickerTarget || !plan) return;
+		mealPlanStore.assign(plan.id, pickerTarget.date, pickerTarget.slot, recipeId);
 		closePicker();
 	}
 	function handleBackdropClick(e: MouseEvent) {
@@ -128,7 +194,7 @@
 	// "Budget Reality Check" the AI Wizard's own spec calls for, borrowed early since it's just
 	// arithmetic, not anything that needs a model.
 	function quickFill() {
-		if (availableRecipes.length === 0) return;
+		if (!plan || availableRecipes.length === 0) return;
 		let cursor = 0;
 		let runningTotal = weekTotal;
 		for (const date of days) {
@@ -145,14 +211,15 @@
 					}
 				}
 				if (!picked) return;
-				mealPlanStore.assign(weekStart, date, slot, picked.id);
+				mealPlanStore.assign(plan.id, date, slot, picked.id);
 				runningTotal += picked.costEstimate?.amount ?? 0;
 			}
 		}
 	}
 
 	function clearWeek() {
-		for (const date of days) mealPlanStore.clearDay(weekStart, date);
+		if (!plan) return;
+		for (const date of days) mealPlanStore.clearDay(plan.id, date);
 	}
 </script>
 
@@ -178,96 +245,169 @@
 	<button class="btn btn--ghost" onclick={goToday}>{t('plan.today')}</button>
 </div>
 
-<div class="budget-bar">
-	<label class="budget-field">
-		{t('plan.budgetLabel')}
-		<input
-			type="number"
-			min="0"
-			placeholder={t('plan.budgetPlaceholder')}
-			bind:value={budgetInput}
-			onblur={saveBudget}
-		/>
-	</label>
-	<span class="budget-total" class:over={overBudget}>
-		{t('plan.sum')}: {weekTotal} PLN{#if plan.budget}
-			&nbsp;/ {plan.budget.amount} PLN{/if}
-	</span>
-	<span class="week-kcal">🔥 {t('plan.weekKcal', { n: weekCalories })}</span>
-</div>
-
-{#if overBudget}
-	<p class="reality-check">{t('plan.realityCheck')}</p>
-{/if}
-
-<div class="plan-actions">
-	<button class="btn btn--primary" onclick={quickFill} disabled={availableRecipes.length === 0}>
-		{t('plan.quickFill')}
-	</button>
-	<button class="btn btn--ghost" onclick={clearWeek}>{t('plan.clearWeek')}</button>
-	<a class="btn btn--ghost" href={`/shopping-list?week=${weekStart}`}>{t('plan.shoppingListLink')}</a>
-</div>
-<p class="hint">{t('plan.quickFillHint')}</p>
-
-<div class="plan-grid">
-	<div class="plan-grid__corner"></div>
-	{#each days as date (date)}
-		<div class="plan-grid__day-head">
-			<span class="weekday">{weekdayLabel(date, uiLocaleStore.locale)}</span>
-			<span class="date">{formatShortDate(date)}</span>
-			<span class="day-kcal">🔥 {t('plan.kcal', { n: dayCalories(date) })}</span>
-		</div>
+<!-- Session 24 — "allow more than 1 weekly plan": tabs, not a single implicit plan per week. -->
+<div class="plan-tabs">
+	{#each plansThisWeek as p (p.id)}
+		<button
+			type="button"
+			class="plan-tab"
+			class:active={p.id === selectedPlanId}
+			onclick={() => (selectedPlanId = p.id)}
+		>
+			{p.name}
+		</button>
 	{/each}
+	<button type="button" class="plan-tab plan-tab--new" onclick={createPlan}>
+		{t('plan.newPlan')}
+	</button>
+</div>
 
-	{#each SLOTS as slot (slot)}
-		<div class="plan-grid__slot-head">{SLOT_LABEL[slot]}</div>
-		{#each days as date (date)}
-			{@const meals = mealsAt(date, slot)}
-			<div class="plan-cell">
-				<!-- Session 23 — "no limit on the amount of meals in the planner": every meal in this
-				     slot gets its own chip (was a single optional one before, `{#if recipe && meal}` /
-				     `{:else}`), and the add button now always renders alongside them, not only when
-				     the cell is empty. -->
-				{#each meals as meal (meal.id)}
-					{@const recipe = recipeById(meal.recipeId)}
-					{#if recipe}
-						<div class="meal-chip">
-							<a href={`/recipes/${recipe.id}`} class="meal-chip__name">{recipe.name}</a>
-							<span class="meal-chip__meta">
-								{#if recipe.costEstimate}{recipe.costEstimate.amount} PLN ·{/if}
-								{recipe.timeMinutes} min · {recipe.macros.kcal} kcal
-							</span>
-							<div class="meal-chip__row">
-								<label class="servings">
-									👥
-									<input
-										type="number"
-										min="1"
-										max="10"
-										value={meal.servings}
-										onchange={(e) =>
-											mealPlanStore.updateServings(
-												weekStart,
-												date,
-												meal.id,
-												Number(e.currentTarget.value) || 1
-											)}
-									/>
-								</label>
-								<button class="remove" onclick={() => mealPlanStore.remove(weekStart, date, meal.id)}>
-									{t('plan.removeMeal')}
-								</button>
-							</div>
-						</div>
-					{/if}
-				{/each}
-				<button class="plan-cell__add" onclick={() => openPicker(date, slot)}>
-					{t('plan.addMeal')}
+{#if plan}
+	<div class="plan-toolbar">
+		{#if renaming}
+			<form
+				class="rename-form"
+				onsubmit={(e) => {
+					e.preventDefault();
+					saveRename();
+				}}
+			>
+				<input type="text" bind:value={renameInput} />
+				<button type="submit" class="btn btn--ghost btn--small">{t('plan.renameSave')}</button>
+				<button type="button" class="btn btn--ghost btn--small" onclick={() => (renaming = false)}>
+					{t('comment.cancel')}
+				</button>
+			</form>
+		{:else}
+			<button type="button" class="btn btn--ghost btn--small" onclick={startRename}>
+				{t('plan.rename')}
+			</button>
+		{/if}
+		<button type="button" class="btn btn--ghost btn--small" onclick={duplicatePlanHere}>
+			{t('plan.duplicate')}
+		</button>
+		<details class="duplicate-to-week" bind:open={showDuplicateToWeek}>
+			<summary class="btn btn--ghost btn--small">{t('plan.duplicateToWeek')}</summary>
+			<div class="duplicate-to-week__form">
+				<input type="date" bind:value={duplicateTargetWeek} />
+				<button
+					type="button"
+					class="btn btn--primary btn--small"
+					disabled={!duplicateTargetWeek}
+					onclick={duplicatePlanToWeek}
+				>
+					{t('plan.duplicate')}
 				</button>
 			</div>
+		</details>
+		<button type="button" class="btn btn--ghost btn--small remove" onclick={deletePlan}>
+			{t('plan.delete')}
+		</button>
+	</div>
+
+	<div class="budget-bar">
+		<label class="budget-field">
+			{t('plan.budgetLabel')}
+			<input
+				type="number"
+				min="0"
+				placeholder={t('plan.budgetPlaceholder')}
+				bind:value={budgetInput}
+				onblur={saveBudget}
+			/>
+		</label>
+		<span class="budget-total" class:over={overBudget}>
+			{t('plan.sum')}: {weekTotal} PLN{#if plan.budget}
+				&nbsp;/ {plan.budget.amount} PLN{/if}
+		</span>
+		<span class="week-kcal">🔥 {t('plan.weekKcal', { n: weekCalories })}</span>
+	</div>
+
+	{#if overBudget}
+		<p class="reality-check">{t('plan.realityCheck')}</p>
+	{/if}
+
+	<div class="plan-actions">
+		<button class="btn btn--primary" onclick={quickFill} disabled={availableRecipes.length === 0}>
+			{t('plan.quickFill')}
+		</button>
+		<button class="btn btn--ghost" onclick={clearWeek}>{t('plan.clearWeek')}</button>
+		<a class="btn btn--ghost" href={`/shopping-list?week=${weekStart}&plan=${plan.id}`}>
+			{t('plan.shoppingListLink')}
+		</a>
+	</div>
+	<p class="hint">{t('plan.quickFillHint')}</p>
+
+	<div class="plan-grid">
+		<div class="plan-grid__corner"></div>
+		{#each days as date (date)}
+			<div class="plan-grid__day-head">
+				<span class="weekday">{weekdayLabel(date, uiLocaleStore.locale)}</span>
+				<span class="date">{formatShortDate(date)}</span>
+				<span class="day-kcal">🔥 {t('plan.kcal', { n: dayCalories(date) })}</span>
+			</div>
 		{/each}
-	{/each}
-</div>
+
+		{#each SLOTS as slot (slot)}
+			<div class="plan-grid__slot-head">{SLOT_LABEL[slot]}</div>
+			{#each days as date (date)}
+				{@const meals = mealsAt(date, slot)}
+				<div class="plan-cell">
+					<!-- Session 23 — "no limit on the amount of meals in the planner": every meal in this
+					     slot gets its own chip, and the add button always renders alongside them, not
+					     only when the cell is empty. -->
+					{#each meals as meal (meal.id)}
+						{@const recipe = recipeById(meal.recipeId)}
+						{#if recipe}
+							<div class="meal-chip">
+								<a href={`/recipes/${recipe.id}`} class="meal-chip__name">{recipe.name}</a>
+								<span class="meal-chip__meta">
+									{#if recipe.costEstimate}{recipe.costEstimate.amount} PLN ·{/if}
+									{recipe.timeMinutes} min · {recipe.macros.kcal} kcal
+								</span>
+								<div class="meal-chip__row">
+									<label class="servings">
+										👥
+										<input
+											type="number"
+											min="1"
+											max="10"
+											value={meal.servings}
+											onchange={(e) =>
+												plan &&
+												mealPlanStore.updateServings(
+													plan.id,
+													date,
+													meal.id,
+													Number(e.currentTarget.value) || 1
+												)}
+										/>
+									</label>
+									<button
+										class="remove"
+										onclick={() => plan && mealPlanStore.remove(plan.id, date, meal.id)}
+									>
+										{t('plan.removeMeal')}
+									</button>
+								</div>
+							</div>
+						{/if}
+					{/each}
+					<button class="plan-cell__add" onclick={() => openPicker(date, slot)}>
+						{t('plan.addMeal')}
+					</button>
+				</div>
+			{/each}
+		{/each}
+	</div>
+{:else}
+	<p class="empty">
+		{t('plan.noPlanThisWeek')}
+		<button type="button" class="btn btn--primary btn--small" onclick={createPlan}>
+			{t('plan.newPlan')}
+		</button>
+	</p>
+{/if}
 
 {#if pickerTarget}
 	{@const target = pickerTarget}
@@ -316,6 +456,90 @@
 		align-items: center;
 		gap: var(--space-3);
 		margin-bottom: var(--space-3);
+	}
+	.plan-tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
+	}
+	.plan-tab {
+		padding: var(--space-1) var(--space-3);
+		border-radius: var(--radius-pill);
+		border: 1px solid var(--bg-surface-alt);
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-family: inherit;
+		cursor: pointer;
+
+		&.active {
+			border-color: var(--accent);
+			background: var(--accent-soft);
+			color: var(--accent);
+			font-weight: 600;
+		}
+		&--new {
+			border-style: dashed;
+		}
+	}
+	.plan-toolbar {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin-bottom: var(--space-3);
+
+		.remove {
+			color: var(--status-danger);
+		}
+	}
+	.btn--small {
+		padding: var(--space-1) var(--space-3);
+		font-size: 12px;
+	}
+	.rename-form {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+
+		input {
+			padding: var(--space-1) var(--space-2);
+			border-radius: var(--radius-card);
+			border: 1px solid var(--bg-surface-alt);
+			font-family: inherit;
+			font-size: 13px;
+		}
+	}
+	.duplicate-to-week {
+		summary {
+			cursor: pointer;
+			list-style: none;
+
+			&::-webkit-details-marker {
+				display: none;
+			}
+		}
+	}
+	.duplicate-to-week__form {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+
+		input {
+			padding: var(--space-1) var(--space-2);
+			border-radius: var(--radius-card);
+			border: 1px solid var(--bg-surface-alt);
+			font-family: inherit;
+			font-size: 13px;
+		}
+	}
+	.empty {
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
 	}
 	.budget-bar {
 		display: flex;
