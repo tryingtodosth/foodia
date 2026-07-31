@@ -42,7 +42,31 @@
 	);
 	let pendingReports = $derived(commentModerationStore.pendingReports());
 
-	let canModerate = $derived(authStore.hydrated && authStore.account?.isModerator === true);
+	// An admin gets in too, not just an `is_moderator` account — the ADMIN_EMAILS allowlist is
+	// strictly above the moderator role, and locking the owner out of the moderation queue would be
+	// a strange place to draw a line. `data.isAdmin` comes from the root layout's server load, so
+	// it's server-resolved truth; the API routes behind every button below re-check it anyway.
+	let canModerate = $derived(
+		data.isAdmin === true || (authStore.hydrated && authStore.account?.isModerator === true)
+	);
+
+	// Every action here is a real network write now (Session 26) rather than a local array mutation,
+	// so a failure has to be visible: silently leaving a report in the queue after a failed resolve
+	// would read as "the click didn't register" and invite a second, equally failed attempt.
+	let actionError = $state(false);
+
+	async function resolveReport(reportId: string, action: 'remove' | 'dismiss') {
+		const { success } = await commentModerationStore.resolve(reportId, action);
+		actionError = !success;
+	}
+	async function recognize(substitutionId: string) {
+		const { success } = await substitutionModerationStore.markRecognized(substitutionId);
+		actionError = !success;
+	}
+	async function unrecognize(substitutionId: string) {
+		const { success } = await substitutionModerationStore.unmark(substitutionId);
+		actionError = !success;
+	}
 </script>
 
 <svelte:head>
@@ -60,6 +84,9 @@
 {:else if !canModerate}
 	<p class="access-denied">{t('moderation.accessDenied')}</p>
 {:else}
+	{#if actionError}
+		<p class="action-error">{t('admin.actionFailed')}</p>
+	{/if}
 	<section>
 		<h2>{t('moderation.pendingReportsHeading')}</h2>
 		{#if pendingReports.length === 0}
@@ -81,14 +108,14 @@
 							<button
 								type="button"
 								class="btn btn--primary"
-								onclick={() => commentModerationStore.resolve(report.id, 'remove')}
+								onclick={() => resolveReport(report.id, 'remove')}
 							>
 								{t('moderation.removeAction')}
 							</button>
 							<button
 								type="button"
 								class="btn btn--ghost"
-								onclick={() => commentModerationStore.resolve(report.id, 'dismiss')}
+								onclick={() => resolveReport(report.id, 'dismiss')}
 							>
 								{t('moderation.dismissAction')}
 							</button>
@@ -119,7 +146,7 @@
 							<button
 								type="button"
 								class="btn btn--primary"
-								onclick={() => substitutionModerationStore.markRecognized(entry.sub.id)}
+								onclick={() => recognize(entry.sub.id)}
 							>
 								⭐ {t('moderation.markRecognized')}
 							</button>
@@ -142,7 +169,7 @@
 							<button
 								type="button"
 								class="btn btn--ghost"
-								onclick={() => substitutionModerationStore.unmark(entry.sub.id)}
+								onclick={() => unrecognize(entry.sub.id)}
 							>
 								{t('moderation.unmark')}
 							</button>
@@ -157,6 +184,10 @@
 <style lang="scss">
 	.access-denied {
 		color: var(--text-secondary);
+	}
+	.action-error {
+		color: var(--status-danger);
+		font-size: 13px;
 	}
 	.empty {
 		color: var(--text-secondary);

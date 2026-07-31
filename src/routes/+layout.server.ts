@@ -12,5 +12,16 @@ import type { LayoutServerLoad } from './$types';
 export const prerender = process.env.BUILD_TARGET === 'capacitor';
 
 export const load: LayoutServerLoad = ({ locals }) => {
-	return { locale: locals.locale };
+	// `isAdmin`/`canUpload` are threaded through the ROOT layout on purpose (Session 26): both are
+	// needed by pages that have no `+page.server.ts` of their own to read `locals` from (the navbar
+	// on every route; /recipes/new's own image-upload control), and both are server-resolved truth
+	// rather than something the client could assert about itself. They're display hints only —
+	// every real gate re-checks server-side at the point of action (/admin's own layout load,
+	// /api/uploads' own permission check), never trusting a value that made a round trip through a
+	// page's props.
+	return {
+		locale: locals.locale,
+		isAdmin: locals.isAdmin,
+		canUpload: locals.user?.canUpload === true
+	};
 };

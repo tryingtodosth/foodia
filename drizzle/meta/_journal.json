@@ -15,6 +15,13 @@
       "when": 1785414113642,
       "tag": "0001_add_step_alternative_substitution_link",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785519043318,
+      "tag": "0002_add_can_upload_and_comment_removal",
+      "breakpoints": true
     }
   ]
 }

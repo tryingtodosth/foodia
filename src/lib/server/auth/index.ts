@@ -39,6 +39,9 @@ export async function register(
 		displayName: trimmedName,
 		avatarUrl: null,
 		isModerator: false,
+		// Default-off, always — see schema.ts's own note on why an upload permission is never
+		// granted at registration time, only explicitly from /admin.
+		canUpload: false,
 		createdAt: new Date().toISOString()
 	});
 
@@ -46,7 +49,14 @@ export async function register(
 	return {
 		success: true,
 		sessionToken,
-		user: { id, email: normalizedEmail, displayName: trimmedName, avatarUrl: null, isModerator: false }
+		user: {
+			id,
+			email: normalizedEmail,
+			displayName: trimmedName,
+			avatarUrl: null,
+			isModerator: false,
+			canUpload: false
+		}
 	};
 }
 
@@ -73,7 +83,8 @@ export async function login(db: Db, email: string, password: string): Promise<Au
 			email: row.email,
 			displayName: row.displayName,
 			avatarUrl: row.avatarUrl,
-			isModerator: row.isModerator
+			isModerator: row.isModerator,
+			canUpload: row.canUpload
 		}
 	};
 }

@@ -31,6 +31,27 @@ function toUserRef(row: UserRow): UserRef {
 	return { id: row.id, displayName: row.displayName, avatarUrl: row.avatarUrl };
 }
 
+/** One place that turns a `comments` row into the client-facing shape, shared by both assembly
+ *  paths below (per-recipe and the bulk one) so a rule like "a removed comment's text never
+ *  leaves the server" can't hold in one and be forgotten in the other — which is exactly how the
+ *  Session 20 private-comment leak happened in the first place. */
+function toNodeComment(row: typeof schema.comments.$inferSelect, author: UserRef): NodeComment {
+	const removed = row.removedAt !== null;
+	return {
+		id: row.id,
+		target: { type: row.targetType, id: row.targetId },
+		// Blanked here, at the boundary, rather than hidden by the component that renders it: the
+		// row keeps its text in D1 (an admin has to be able to review/undo a removal), but a viewer
+		// gets the tombstone flag and nothing else.
+		content: removed ? '' : row.content,
+		visibility: row.visibility,
+		author,
+		reactions: { upCount: row.upCount, downCount: row.downCount, currentUserReaction: null },
+		createdAt: row.createdAt,
+		removed: removed ? true : undefined
+	};
+}
+
 /** Loads every user once and resolves refs from an in-memory map — this app has a handful of
  *  users, not millions; a real per-recipe author/proposer JOIN chain would be several joins deep
  *  for very little benefit at this scale. Revisit if the user table ever stops being small. */
@@ -141,15 +162,7 @@ async function assembleRecipeDetail(
 		? commentRows.map((c) => {
 				const commentAuthor = users.get(c.authorId);
 				if (!commentAuthor) throw new Error(`Comment ${c.id} references unknown author ${c.authorId}`);
-				return {
-					id: c.id,
-					target: { type: c.targetType, id: c.targetId },
-					content: c.content,
-					visibility: c.visibility,
-					author: commentAuthor,
-					reactions: { upCount: c.upCount, downCount: c.downCount, currentUserReaction: null },
-					createdAt: c.createdAt
-				};
+				return toNodeComment(c, commentAuthor);
 			})
 		: undefined;
 
@@ -309,15 +322,7 @@ async function assembleAllRecipeDetails(db: Db): Promise<RecipeDetail[]> {
 			? recipeCommentRows.map((c) => {
 					const commentAuthor = users.get(c.authorId);
 					if (!commentAuthor) throw new Error(`Comment ${c.id} references unknown author ${c.authorId}`);
-					return {
-						id: c.id,
-						target: { type: c.targetType, id: c.targetId },
-						content: c.content,
-						visibility: c.visibility,
-						author: commentAuthor,
-						reactions: { upCount: c.upCount, downCount: c.downCount, currentUserReaction: null },
-						createdAt: c.createdAt
-					};
+					return toNodeComment(c, commentAuthor);
 				})
 			: undefined;
 

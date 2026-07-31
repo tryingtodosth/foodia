@@ -1,0 +1,20 @@
+// vite.config.ts
+import { sveltekit } from "file:///home/alojzy/Wymiana_VM/foodia/node_modules/@sveltejs/kit/src/exports/vite/index.js";
+import { defineConfig } from "file:///home/alojzy/Wymiana_VM/foodia/node_modules/vite/dist/node/index.js";
+var vite_config_default = defineConfig({
+  plugins: [sveltekit()],
+  // A compile-time constant, not a runtime check — lets client components (not just server code)
+  // tell the two build targets apart (svelte.config.js's own BUILD_TARGET env var, threaded
+  // through here since a .svelte file can't read `process.env` directly). Needed by
+  // /shopping-list specifically (Session 16): it has no +page.server.ts by design, so it can't
+  // get this from a server load the way every other route already does, but it still needs to
+  // know whether to call the real httpApiClient (default build, a live server exists) or fall
+  // back to mockApiClient (Capacitor build, static output, no server ever exists to call).
+  define: {
+    __IS_CAPACITOR__: JSON.stringify(process.env.BUILD_TARGET === "capacitor")
+  }
+});
+export {
+  vite_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidml0ZS5jb25maWcudHMiXSwKICAic291cmNlc0NvbnRlbnQiOiBbImNvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9kaXJuYW1lID0gXCIvaG9tZS9hbG9qenkvV3ltaWFuYV9WTS9mb29kaWFcIjtjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfZmlsZW5hbWUgPSBcIi9ob21lL2Fsb2p6eS9XeW1pYW5hX1ZNL2Zvb2RpYS92aXRlLmNvbmZpZy50c1wiO2NvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9pbXBvcnRfbWV0YV91cmwgPSBcImZpbGU6Ly8vaG9tZS9hbG9qenkvV3ltaWFuYV9WTS9mb29kaWEvdml0ZS5jb25maWcudHNcIjtpbXBvcnQgeyBzdmVsdGVraXQgfSBmcm9tICdAc3ZlbHRlanMva2l0L3ZpdGUnO1xuaW1wb3J0IHsgZGVmaW5lQ29uZmlnIH0gZnJvbSAndml0ZSc7XG5cbmV4cG9ydCBkZWZhdWx0IGRlZmluZUNvbmZpZyh7XG5cdHBsdWdpbnM6IFtzdmVsdGVraXQoKV0sXG5cdC8vIEEgY29tcGlsZS10aW1lIGNvbnN0YW50LCBub3QgYSBydW50aW1lIGNoZWNrIFx1MjAxNCBsZXRzIGNsaWVudCBjb21wb25lbnRzIChub3QganVzdCBzZXJ2ZXIgY29kZSlcblx0Ly8gdGVsbCB0aGUgdHdvIGJ1aWxkIHRhcmdldHMgYXBhcnQgKHN2ZWx0ZS5jb25maWcuanMncyBvd24gQlVJTERfVEFSR0VUIGVudiB2YXIsIHRocmVhZGVkXG5cdC8vIHRocm91Z2ggaGVyZSBzaW5jZSBhIC5zdmVsdGUgZmlsZSBjYW4ndCByZWFkIGBwcm9jZXNzLmVudmAgZGlyZWN0bHkpLiBOZWVkZWQgYnlcblx0Ly8gL3Nob3BwaW5nLWxpc3Qgc3BlY2lmaWNhbGx5IChTZXNzaW9uIDE2KTogaXQgaGFzIG5vICtwYWdlLnNlcnZlci50cyBieSBkZXNpZ24sIHNvIGl0IGNhbid0XG5cdC8vIGdldCB0aGlzIGZyb20gYSBzZXJ2ZXIgbG9hZCB0aGUgd2F5IGV2ZXJ5IG90aGVyIHJvdXRlIGFscmVhZHkgZG9lcywgYnV0IGl0IHN0aWxsIG5lZWRzIHRvXG5cdC8vIGtub3cgd2hldGhlciB0byBjYWxsIHRoZSByZWFsIGh0dHBBcGlDbGllbnQgKGRlZmF1bHQgYnVpbGQsIGEgbGl2ZSBzZXJ2ZXIgZXhpc3RzKSBvciBmYWxsXG5cdC8vIGJhY2sgdG8gbW9ja0FwaUNsaWVudCAoQ2FwYWNpdG9yIGJ1aWxkLCBzdGF0aWMgb3V0cHV0LCBubyBzZXJ2ZXIgZXZlciBleGlzdHMgdG8gY2FsbCkuXG5cdGRlZmluZToge1xuXHRcdF9fSVNfQ0FQQUNJVE9SX186IEpTT04uc3RyaW5naWZ5KHByb2Nlc3MuZW52LkJVSUxEX1RBUkdFVCA9PT0gJ2NhcGFjaXRvcicpXG5cdH1cbn0pO1xuIl0sCiAgIm1hcHBpbmdzIjogIjtBQUE0USxTQUFTLGlCQUFpQjtBQUN0UyxTQUFTLG9CQUFvQjtBQUU3QixJQUFPLHNCQUFRLGFBQWE7QUFBQSxFQUMzQixTQUFTLENBQUMsVUFBVSxDQUFDO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQSxFQVFyQixRQUFRO0FBQUEsSUFDUCxrQkFBa0IsS0FBSyxVQUFVLFFBQVEsSUFBSSxpQkFBaUIsV0FBVztBQUFBLEVBQzFFO0FBQ0QsQ0FBQzsiLAogICJuYW1lcyI6IFtdCn0K

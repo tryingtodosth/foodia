@@ -5,6 +5,14 @@
 	import { authStore } from '$lib/state/auth.svelte';
 	import { t } from '$lib/i18n/t';
 
+	// Server-resolved (root +layout.server.ts → hooks.server.ts → the ADMIN_EMAILS allowlist), NOT
+	// read off `authStore.account` like `isModerator` above it. That difference is deliberate: the
+	// client store's account object is whatever /api/auth/me handed back, which is fine for showing
+	// or hiding a link, but admin status should never be a property the client is holding a copy of
+	// and could be tempted to set. This prop only decides whether a link is *drawn* — /admin itself
+	// 404s server-side for anyone not on the allowlist, so a forged `true` here buys nothing.
+	let { isAdmin = false }: { isAdmin?: boolean } = $props();
+
 	function handleLogout() {
 		authStore.logout();
 	}
@@ -15,6 +23,9 @@
 		<summary>{authStore.account.displayName}</summary>
 		<div class="account-menu__panel">
 			<a href={`/users/${authStore.account.id}`}>{t('userProfile.myProfileLink')}</a>
+			{#if isAdmin}
+				<a href="/admin" class="account-menu__admin">{t('admin.navLink')}</a>
+			{/if}
 			{#if authStore.account.isModerator}
 				<a href="/moderation">{t('moderation.pageTitle')}</a>
 			{/if}
@@ -96,6 +107,10 @@
 		}
 		a {
 			color: var(--text-primary);
+		}
+		a.account-menu__admin {
+			color: var(--accent);
+			font-weight: 600;
 		}
 	}
 </style>

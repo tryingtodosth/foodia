@@ -7,6 +7,8 @@
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { authStore } from '$lib/state/auth.svelte';
 	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
+	import { commentModerationStore } from '$lib/state/commentModeration.svelte';
+	import { substitutionModerationStore } from '$lib/state/substitutionModeration.svelte';
 	import { getCookie } from '$lib/utils/cookies';
 	import { isUiLocale } from '$lib/i18n/locales';
 	import LanguageSwitcher from '$lib/components/shared/LanguageSwitcher.svelte';
@@ -55,6 +57,10 @@
 		mealPlanStore.hydrate();
 		authStore.hydrate();
 		ingredientDensityStore.hydrate();
+		// Session 26 — both of these went from session-only in-memory state to caches of real D1
+		// rows, so they now need the same one-time hydration every other store here already had.
+		commentModerationStore.hydrate();
+		substitutionModerationStore.hydrate();
 	});
 </script>
 
@@ -69,7 +75,7 @@
 			<a href="/recipes/new">{t('nav.newRecipe')}</a>
 		</nav>
 		<div class="shell__account">
-			<UserAvatarMenu />
+			<UserAvatarMenu isAdmin={data.isAdmin === true} />
 			<LanguageSwitcher />
 		</div>
 	</header>

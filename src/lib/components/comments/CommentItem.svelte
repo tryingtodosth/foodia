@@ -2,6 +2,7 @@
 	import type { NodeComment } from '$lib/types/recipe';
 	import type { CommentReportReason } from '$lib/types/moderation';
 	import { commentModerationStore } from '$lib/state/commentModeration.svelte';
+	import { authStore } from '$lib/state/auth.svelte';
 	import { currentUserRef } from '$lib/state/profile.svelte';
 	import { t } from '$lib/i18n/t';
 	import ReactionButtons from './ReactionButtons.svelte';
@@ -22,13 +23,34 @@
 
 	let reporting = $state(false);
 	let reason = $state<CommentReportReason>('spam');
+	let submitting = $state(false);
+	let reportError = $state(false);
 
-	let status = $derived(commentModerationStore.statusFor(comment.id));
+	// Two independent sources of "this was removed," and both matter (Session 26): the server's own
+	// flag, which every viewer gets from the read path and which survives a reload, and the local
+	// store, which is what makes a removal the current moderator just performed take effect
+	// immediately without a refetch. Either one is sufficient.
+	let status = $derived(
+		comment.removed === true || commentModerationStore.statusFor(comment.id) === 'removed'
+			? 'removed'
+			: 'visible'
+	);
 	let alreadyReported = $derived(commentModerationStore.hasPendingReport(comment.id));
 
-	function submitReport() {
-		if (!context) return;
-		commentModerationStore.report({
+	// Filing a report needs a real account now that reports are D1 rows (a report with no identity
+	// behind it can't be weighed or followed up on — /api/comment-reports' own 401). So the button
+	// is only offered to someone who can actually use it, rather than offered to everyone and
+	// failing on click. The Capacitor build keeps its session-only local reports, which never
+	// needed a server or an account.
+	let canReport = $derived(__IS_CAPACITOR__ || (authStore.hydrated && authStore.isAuthenticated));
+
+	// Filing a report is a real network write now (Session 26), so this awaits the result instead
+	// of assuming it: silently closing the form on a failed POST would tell the reporter their
+	// report was filed when no row exists anywhere.
+	async function submitReport() {
+		if (!context || submitting) return;
+		submitting = true;
+		const { success } = await commentModerationStore.report({
 			commentId: comment.id,
 			recipeId: context.recipeId,
 			recipeName: context.recipeName,
@@ -38,7 +60,13 @@
 			reason,
 			reportedBy: currentUserRef()
 		});
+		submitting = false;
+		if (!success) {
+			reportError = true;
+			return;
+		}
 		reporting = false;
+		reportError = false;
 		reason = 'spam';
 	}
 </script>
@@ -57,7 +85,7 @@
 			     suggestions get upvote/downvote (CLAUDE.md 4.4/6.4). Same reasoning applies to
 			     reporting: nobody but the author can even see a private note to report it. -->
 			<ReactionButtons reactions={comment.reactions} compact />
-			{#if context}
+			{#if context && canReport}
 				{#if alreadyReported}
 					<span class="report-status">{t('moderation.reportedLabel')}</span>
 				{:else if !reporting}
@@ -89,8 +117,13 @@
 				<button type="button" class="btn btn--ghost" onclick={() => (reporting = false)}>
 					{t('comment.cancel')}
 				</button>
-				<button type="submit" class="btn btn--primary">{t('moderation.reportSubmit')}</button>
+				<button type="submit" class="btn btn--primary" disabled={submitting}>
+					{submitting ? t('admin.saving') : t('moderation.reportSubmit')}
+				</button>
 			</div>
+			{#if reportError}
+				<p class="report-form__error">{t('admin.actionFailed')}</p>
+			{/if}
 		</form>
 	{/if}
 {/if}
@@ -154,6 +187,12 @@
 			font-size: 12px;
 			margin-left: var(--space-1);
 		}
+	}
+	.report-form__error {
+		margin: 0;
+		padding-left: var(--space-3);
+		font-size: 12px;
+		color: var(--status-danger);
 	}
 	.report-form__actions {
 		display: flex;

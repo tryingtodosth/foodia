@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local dev; set the real value in production with:
+#   npx wrangler pages secret put ADMIN_EMAILS --project-name foodia
+# Comma-separated list of the account emails allowed into /admin. Blank/absent = nobody.
+ADMIN_EMAILS=""

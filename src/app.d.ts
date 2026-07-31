@@ -1,15 +1,24 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 import type { UiLocale } from '$lib/i18n/locales';
+import type { SessionUser } from '$lib/server/auth/session';
 
 declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
 			locale: UiLocale;
+			/** Resolved once per request in hooks.server.ts from the session cookie. `null` for an
+			 *  anonymous visitor AND for the Capacitor prerender (no D1 binding exists there). */
+			user: SessionUser | null;
+			/** ADMIN_EMAILS allowlist membership — see lib/server/auth/admin.ts for why this is an
+			 *  env allowlist and not a database column. */
+			isAdmin: boolean;
 		}
 		interface PageData {
 			locale: UiLocale;
+			isAdmin?: boolean;
+			canUpload?: boolean;
 		}
 		// interface PageState {}
 		interface Platform {

@@ -32,6 +32,10 @@ export interface SessionUser {
 	displayName: string;
 	avatarUrl: string | null;
 	isModerator: boolean;
+	/** Session 26 — the R2 upload permission (schema.ts's own `users.can_upload`). Deliberately
+	 *  NOT the admin flag: admin identity is decided by the ADMIN_EMAILS allowlist (./admin.ts),
+	 *  never by a column any code path in this app is able to write. */
+	canUpload: boolean;
 }
 
 /** Creates a session row and returns the RAW token — the only time the raw value ever exists;
@@ -64,7 +68,8 @@ export async function validateSession(db: Db, token: string | undefined): Promis
 			email: users.email,
 			displayName: users.displayName,
 			avatarUrl: users.avatarUrl,
-			isModerator: users.isModerator
+			isModerator: users.isModerator,
+			canUpload: users.canUpload
 		})
 		.from(sessions)
 		.innerJoin(users, eq(users.id, sessions.userId))

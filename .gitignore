@@ -17,3 +17,6 @@ ios/
 
 # Claude Code local-only settings (personal permission allowlist, not shared config)
 .claude/settings.local.json
+
+# Local Worker env (ADMIN_EMAILS) — the production value is a Cloudflare secret, never committed.
+.dev.vars

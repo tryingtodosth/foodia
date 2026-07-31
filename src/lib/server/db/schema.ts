@@ -24,6 +24,14 @@ export const users = sqliteTable('users', {
 	displayName: text('display_name').notNull(),
 	avatarUrl: text('avatar_url'),
 	isModerator: integer('is_moderator', { mode: 'boolean' }).notNull().default(false),
+	// Session 26 — per-account permission to upload real media (R2), deliberately default-off for
+	// EVERY account including the admin's own: an upload path that writes real bytes to real
+	// storage is the first thing in this app a stranger with an account could abuse, so the honest
+	// default is "nobody, until someone is explicitly granted it" rather than "everyone with a
+	// login." Granted only from /admin's own users table — there is no self-service path to it,
+	// which is the whole point. Note this is NOT the admin flag: admin identity comes from the
+	// ADMIN_EMAILS env allowlist (lib/server/auth/admin.ts), never from a column the app can write.
+	canUpload: integer('can_upload', { mode: 'boolean' }).notNull().default(false),
 	createdAt: text('created_at').notNull()
 });
 
@@ -159,7 +167,15 @@ export const comments = sqliteTable('comments', {
 		.references(() => users.id),
 	upCount: integer('up_count').notNull().default(0),
 	downCount: integer('down_count').notNull().default(0),
-	createdAt: text('created_at').notNull()
+	createdAt: text('created_at').notNull(),
+	// Session 26 — a moderator removal is a soft delete, not a DELETE: the recipe page renders a
+	// tombstone ("removed by a moderator") in place of the content, which needs the row to still
+	// exist, and /activity's own "your comments a moderator removed" section needs it too. The
+	// content column is left intact deliberately — a removal must be reviewable/reversible by an
+	// admin, and the read path (assembleRecipeDetail) is what strips the text before it ever
+	// reaches a viewer, so nothing leaks by keeping it.
+	removedAt: text('removed_at'),
+	removedById: text('removed_by_id').references(() => users.id)
 });
 
 export const commentReports = sqliteTable('comment_reports', {

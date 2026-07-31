@@ -11,7 +11,9 @@
 	// submit time do a step's `ingredientLocalIds` get resolved to real array positions
 	// (`CreateRecipeInput.ingredientIndexes`), by which point the ingredient order is final.
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { authStore } from '$lib/state/auth.svelte';
+	import ImageUploadField from '$lib/components/media/ImageUploadField.svelte';
 	import { t } from '$lib/i18n/t';
 	import type { HardwareProfile } from '$lib/types/user';
 	import type { CreateRecipeInput } from '$lib/types/recipeInput';
@@ -196,10 +198,7 @@
 				{t('recipeComposer.descriptionLabel')}
 				<textarea bind:value={description} rows="3" required></textarea>
 			</label>
-			<label class="field">
-				{t('recipeComposer.heroImageLabel')}
-				<input type="url" bind:value={heroImage} placeholder="https://..." />
-			</label>
+			<ImageUploadField bind:value={heroImage} canUpload={page.data.canUpload === true} />
 			<label class="field">
 				{t('recipeComposer.tagsLabel')}
 				<input type="text" bind:value={tagsText} placeholder="obiad, szybkie" />

@@ -20,5 +20,20 @@
 			"database_id": "6bacf9d0-b5c2-4643-9e14-e1bf39ceee84",
 			"migrations_dir": "drizzle"
 		}
+	],
+	// R2 (Session 26) — real object storage for recipe photos, the "FUTURES.md 9.5 / Phase 2 R2
+	// uploads" item, built now because the upload permission asked for is meaningless without a
+	// real upload behind it. The bucket is PRIVATE (no public r2.dev domain, no custom domain):
+	// bytes are served back through this app's own `/api/media/[key]` route instead, so there is
+	// exactly one way in (POST /api/uploads, session + can_upload required) and one way out, both
+	// of them code in this repo. Create it once per environment with:
+	//   npx wrangler r2 bucket create foodia-media
+	// `--local`/`vite dev` simulates the bucket on disk under .wrangler/ and never calls
+	// Cloudflare's API, exactly as the D1 binding above already does.
+	"r2_buckets": [
+		{
+			"binding": "MEDIA",
+			"bucket_name": "foodia-media"
+		}
 	]
 }

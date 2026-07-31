@@ -96,6 +96,11 @@ export interface NodeComment {
 	author: UserRef;
 	reactions?: ReactionSummary;
 	createdAt: string;
+	/** Session 26 — a moderator removed this comment. The read path (`dbApiClient`) blanks
+	 *  `content` before the row ever leaves the server, so this flag is all a viewer gets: it's
+	 *  what renders the tombstone ("removed by a moderator") in place of text, rather than the
+	 *  comment silently vanishing and leaving a thread that no longer makes sense to read. */
+	removed?: boolean;
 }
 
 export interface RecipeRelationship {
