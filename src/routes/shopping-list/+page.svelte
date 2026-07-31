@@ -7,8 +7,11 @@
 	import { goto } from '$app/navigation';
 	import { mealPlanStore } from '$lib/state/mealPlan.svelte';
 	import { pantryStore } from '$lib/state/pantry.svelte';
+	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
 	import { mockApiClient } from '$lib/api/mock';
 	import { httpApiClient } from '$lib/api/http';
+	import type { DensityClass } from '$lib/types/units';
+	import type { MessageKey } from '$lib/i18n/messages';
 
 	// See vite.config.ts's own comment — this route has no +page.server.ts (by design, its core
 	// data is client-only), so it can't learn which build target it's in from a server load the
@@ -17,6 +20,7 @@
 	// would just 404 — mockApiClient is the only architecturally honest choice for that target.
 	const recipeApiClient = __IS_CAPACITOR__ ? mockApiClient : httpApiClient;
 	import { aggregateIngredients, crossReferencePantry } from '$lib/utils/shoppingList';
+	import { formatQuantity } from '$lib/utils/units';
 	import { formatShoppingListText, copyToClipboard, exportToEGrocery } from '$lib/utils/shoppingExport';
 	import { toISODate, mondayOf, addDays, formatShortDate } from '$lib/utils/week';
 	import { t } from '$lib/i18n/t';
@@ -55,9 +59,23 @@
 	});
 
 	let aggregated = $derived(plan ? aggregateIngredients(plan, recipesById) : []);
-	let shoppingItems = $derived(crossReferencePantry(aggregated, pantryStore.items));
+	// Session 25 — real unit conversion (lib/utils/units.ts). `ingredientDensityStore.classFor` is
+	// read here, inside this $derived's own evaluation, which is what makes classifying an
+	// ingredient below correctly recompute this list — same reactive-through-a-function-call
+	// tracking `uiLocaleStore.locale` already relies on elsewhere in this app.
+	let shoppingItems = $derived(
+		crossReferencePantry(aggregated, pantryStore.items, ingredientDensityStore.classFor)
+	);
 	let missingItems = $derived(shoppingItems.filter((i) => i.missingQuantity > 0));
 	let coveredItems = $derived(shoppingItems.filter((i) => i.missingQuantity === 0 && i.pantryQuantity > 0));
+
+	const DENSITY_CLASSES: { key: DensityClass; labelKey: string; exampleKey: string }[] = [
+		{ key: 'powdery', labelKey: 'shopping.density.powdery', exampleKey: 'shopping.density.powderyExample' },
+		{ key: 'granular', labelKey: 'shopping.density.granular', exampleKey: 'shopping.density.granularExample' },
+		{ key: 'liquid', labelKey: 'shopping.density.liquid', exampleKey: 'shopping.density.liquidExample' },
+		{ key: 'light', labelKey: 'shopping.density.light', exampleKey: 'shopping.density.lightExample' },
+		{ key: 'dense', labelKey: 'shopping.density.dense', exampleKey: 'shopping.density.denseExample' }
+	];
 
 	let listText = $derived(formatShoppingListText(missingItems, weekStart));
 
@@ -127,14 +145,40 @@
 				{#each missingItems as item (item.key)}
 					<li class="shopping-item">
 						<div class="shopping-item__main">
-							<span class="shopping-item__qty">{item.missingQuantity} {item.unit}</span>
+							<span class="shopping-item__qty">{formatQuantity(item.missingQuantity)} {item.unit}</span>
 							<span class="shopping-item__name">{item.name}</span>
-							{#if item.partiallyCoveredDifferentUnit}
+							{#if item.unitStatus === 'converted'}
+								<span class="badge badge--converted" title={t('shopping.convertedTitle')}>
+									{t('shopping.convertedBadge')}
+								</span>
+							{:else if item.unitStatus === 'incompatible'}
 								<span class="badge" title={t('shopping.differentUnitTitle')}>
 									{t('shopping.differentUnitBadge')}
 								</span>
 							{/if}
 						</div>
+						{#if item.unitStatus === 'needsDensity'}
+							<!-- Session 25 — the real ask this closes: instead of a dead-end "can't compare,"
+							     ask once, cache the answer per ingredient name, reuse it everywhere from then
+							     on (ingredientDensityStore, lib/utils/units.ts's own header comment). -->
+							<div class="density-prompt">
+								<span class="density-prompt__question">
+									{t('shopping.densityQuestion', { name: item.name })}
+								</span>
+								<div class="density-prompt__options">
+									{#each DENSITY_CLASSES as dc (dc.key)}
+										<button
+											type="button"
+											class="density-prompt__option"
+											onclick={() => ingredientDensityStore.classify(item.name, dc.key)}
+										>
+											{t(dc.labelKey as MessageKey)}
+											<span class="density-prompt__example">{t(dc.exampleKey as MessageKey)}</span>
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
 						<div class="shopping-item__meta">
 							<span class="used-in">{t('shopping.usedIn', { names: item.usedInRecipeNames.join(', ') })}</span>
 							<button class="btn btn--ghost btn--small" onclick={() => markBought(item)}>
@@ -153,8 +197,8 @@
 			<ul class="covered-list">
 				{#each coveredItems as item (item.key)}
 					<li>
-						{item.name} — {item.pantryQuantity} {item.unit} ({t('shopping.neededLabel', {
-							n: item.neededQuantity,
+						{item.name} — {formatQuantity(item.pantryQuantity)} {item.unit} ({t('shopping.neededLabel', {
+							n: formatQuantity(item.neededQuantity),
 							unit: item.unit
 						})})
 					</li>
@@ -246,6 +290,53 @@
 		padding: 2px 8px;
 		border-radius: var(--radius-pill);
 		background: var(--bg-surface-alt);
+		color: var(--text-secondary);
+
+		&--converted {
+			background: var(--status-success);
+			color: white;
+		}
+	}
+	.density-prompt {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-card);
+		background: var(--bg-surface-alt);
+		font-size: 13px;
+	}
+	.density-prompt__question {
+		color: var(--text-secondary);
+	}
+	.density-prompt__options {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+	.density-prompt__option {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-card);
+		border: 1px solid var(--bg-surface);
+		background: var(--bg-surface);
+		cursor: pointer;
+		font-family: inherit;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--text-primary);
+
+		&:hover {
+			border-color: var(--accent);
+			color: var(--accent);
+		}
+	}
+	.density-prompt__example {
+		font-size: 11px;
+		font-weight: 400;
 		color: var(--text-secondary);
 	}
 	.shopping-item__meta {

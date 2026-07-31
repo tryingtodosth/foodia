@@ -4,6 +4,9 @@
 // on a returning visitor's already-saved list).
 import type { PantryItem } from '$lib/types/pantry';
 import { readJSON, writeJSON } from '$lib/utils/storage';
+import { convertQuantity, normalizeUnit } from '$lib/utils/units';
+import { DENSITY_CLASS_G_PER_ML } from '$lib/types/units';
+import { ingredientDensityStore } from './ingredientDensity.svelte';
 
 const STORAGE_KEY = 'foodia-pantry';
 
@@ -29,11 +32,14 @@ export const pantryStore = {
 	/**
 	 * Merges into an existing item on a match, rather than always appending — same `(name, unit)`
 	 * compound-key convention `shoppingList.ts`'s `aggregateIngredients` already establishes
-	 * (case-insensitive, trimmed), so "Sól" logged twice in the same unit becomes one row with the
-	 * summed quantity instead of two phantom-duplicate rows (CLAUDE.md Section 7 item 12/
-	 * `FUTURES.md` Section 1 — a real, previously-flagged bug, not a new behavior). A different
-	 * unit for the same ingredient name is deliberately still a separate row, for the identical
-	 * "can't safely convert units" reason `crossReferencePantry` already states.
+	 * (case-insensitive, trimmed, and now unit-alias-normalized too — "Tbsp" and "tablespoons" are
+	 * the same unit, CLAUDE.md 4.5/4.7 Session 25). A different unit for the same ingredient name
+	 * now also merges for real, wherever real conversion math allows it (`lib/utils/units.ts`):
+	 * same-family (g<->oz) always; cross-family (cup<->g) only when a `DensityClass` is already
+	 * cached for that ingredient. No density prompt fires from here — that UI belongs on the
+	 * shopping list, where an unresolved mismatch actually blocks a real decision; a still-different
+	 * unit with no resolvable conversion just becomes its own separate row, same honest fallback
+	 * this function always had.
 	 */
 	add(input: { ingredientName: string; quantity: number; unit: string }): void {
 		const trimmed = input.ingredientName.trim();
@@ -42,31 +48,49 @@ export const pantryStore = {
 		// the page before this is ever called) — 'pc' is a neutral fallback for the rare direct
 		// caller that somehow supplies an empty unit, not a second, competing default to keep in sync.
 		const unit = input.unit || 'pc';
-		const key = (name: string, u: string) => `${name.trim().toLowerCase()}::${u.trim().toLowerCase()}`;
-		const targetKey = key(trimmed, unit);
-		const existing = items.find((item) => key(item.ingredientName, item.unit) === targetKey);
-		if (existing) {
+		const nameKey = trimmed.toLowerCase();
+
+		const exactMatch = items.find(
+			(item) =>
+				item.ingredientName.trim().toLowerCase() === nameKey &&
+				normalizeUnit(item.unit) === normalizeUnit(unit)
+		);
+		if (exactMatch) {
 			items = items.map((item) =>
-				item.id === existing.id
-					? {
-							...item,
-							quantity: item.quantity + input.quantity,
-							updatedAt: new Date().toISOString()
-						}
+				item.id === exactMatch.id
+					? { ...item, quantity: item.quantity + input.quantity, updatedAt: new Date().toISOString() }
 					: item
 			);
-		} else {
-			items = [
-				...items,
-				{
-					id: crypto.randomUUID(),
-					ingredientName: trimmed,
-					quantity: input.quantity,
-					unit,
-					updatedAt: new Date().toISOString()
-				}
-			];
+			persist();
+			return;
 		}
+
+		const sameNameOtherUnit = items.find((item) => item.ingredientName.trim().toLowerCase() === nameKey);
+		if (sameNameOtherUnit) {
+			const densityClass = ingredientDensityStore.classFor(trimmed);
+			const densityGPerMl = densityClass ? DENSITY_CLASS_G_PER_ML[densityClass] : undefined;
+			const converted = convertQuantity(input.quantity, unit, sameNameOtherUnit.unit, densityGPerMl);
+			if (converted !== null) {
+				items = items.map((item) =>
+					item.id === sameNameOtherUnit.id
+						? { ...item, quantity: item.quantity + converted, updatedAt: new Date().toISOString() }
+						: item
+				);
+				persist();
+				return;
+			}
+		}
+
+		items = [
+			...items,
+			{
+				id: crypto.randomUUID(),
+				ingredientName: trimmed,
+				quantity: input.quantity,
+				unit,
+				updatedAt: new Date().toISOString()
+			}
+		];
 		persist();
 	},
 	/** "Odklikuje to, co zużyła" (CLAUDE.md 4.5) — P1 has no MealPlan to reconcile against, so

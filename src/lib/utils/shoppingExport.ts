@@ -6,6 +6,7 @@
 // language can change at any moment (LanguageSwitcher, no reload), so the presentation layer
 // (routes/shopping-list/+page.svelte) is what turns a code into text via `t()`, not this file.
 import { t } from '$lib/i18n/t';
+import { formatQuantity } from '$lib/utils/units';
 import type { ShoppingListItem } from './shoppingList';
 
 /** Reads `t()` directly — a deliberate, small exception to this file's own "pure util" shape, same
@@ -15,7 +16,10 @@ export function formatShoppingListText(items: ShoppingListItem[], weekStart: str
 	if (items.length === 0) {
 		return `${t('shopping.export.header', { weekStart })}\n\n${t('shopping.export.allCoveredText')}`;
 	}
-	const lines = items.map((i) => `- ${i.missingQuantity} ${i.unit} ${i.name}`);
+	// `formatQuantity`, not the raw number — a missing quantity is now often the result of real
+	// conversion math (Session 25), so "263.41176470588235 g" is a genuinely reachable value here,
+	// and this text goes straight onto a shopper's clipboard.
+	const lines = items.map((i) => `- ${formatQuantity(i.missingQuantity)} ${i.unit} ${i.name}`);
 	return `${t('shopping.export.header', { weekStart })}\n\n${lines.join('\n')}`;
 }
 

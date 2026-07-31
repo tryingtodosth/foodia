@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { pantryStore } from '$lib/state/pantry.svelte';
+	import { formatQuantity } from '$lib/utils/units';
 	import { t } from '$lib/i18n/t';
 	import type { PantryItem } from '$lib/types/pantry';
 
@@ -74,7 +75,7 @@
 <ul class="pantry-list">
 	{#each pantryStore.items as item (item.id)}
 		<li>
-			<span>{item.quantity} {item.unit} {item.ingredientName}</span>
+			<span>{formatQuantity(item.quantity)} {item.unit} {item.ingredientName}</span>
 			<button class="btn btn--ghost" onclick={() => removeItem(item.id)}>
 				{t('pantry.used')}
 			</button>

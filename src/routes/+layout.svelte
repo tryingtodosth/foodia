@@ -6,6 +6,7 @@
 	import { mealPlanStore } from '$lib/state/mealPlan.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { authStore } from '$lib/state/auth.svelte';
+	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
 	import { getCookie } from '$lib/utils/cookies';
 	import { isUiLocale } from '$lib/i18n/locales';
 	import LanguageSwitcher from '$lib/components/shared/LanguageSwitcher.svelte';
@@ -53,6 +54,7 @@
 		pantryStore.hydrate();
 		mealPlanStore.hydrate();
 		authStore.hydrate();
+		ingredientDensityStore.hydrate();
 	});
 </script>
 
