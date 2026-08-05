@@ -71,8 +71,11 @@ const pl = {
 	'onboarding.diet.vegetarian': 'Wegetariańska',
 	'onboarding.diet.vegan': 'Wegańska',
 	'onboarding.diet.keto': 'Keto',
-	'onboarding.allergiesLabel': 'Alergie / czego unikasz (oddziel przecinkami)',
-	'onboarding.allergiesPlaceholder': 'np. orzechy, laktoza',
+	'onboarding.allergiesLabel': 'Alergie / czego unikasz',
+	'onboarding.allergiesPlaceholder': 'np. orzechy',
+	'onboarding.allergiesHint':
+		'Wpisz i naciśnij Enter, żeby dodać. Przepisy z tymi składnikami nie trafią do Twojego planu.',
+	'onboarding.allergyRemove': 'Usuń: {name}',
 	'onboarding.goalHeading': 'Jaki masz cel?',
 	'onboarding.goal.weight_loss': 'Redukcja wagi',
 	'onboarding.goal.easy_digestion': 'Lekkostrawność',
@@ -147,6 +150,7 @@ const pl = {
 	'plan.pickerClose': 'Zamknij',
 	'plan.pickerCloseAria': 'Zamknij wybór przepisu',
 	'plan.pickerEmpty': 'Brak przepisów pasujących do Twojego sprzętu.',
+	'plan.pickerEmptyAllergies': 'Wszystkie dostępne przepisy zawierają składniki, które wykluczyłaś(eś).',
 	'plan.pickerChangeProfile': 'Zmień profil',
 
 	'shopping.title': 'Lista zakupów',
@@ -442,8 +446,11 @@ const en = {
 	'onboarding.diet.vegetarian': 'Vegetarian',
 	'onboarding.diet.vegan': 'Vegan',
 	'onboarding.diet.keto': 'Keto',
-	'onboarding.allergiesLabel': 'Allergies / things you avoid (comma-separated)',
-	'onboarding.allergiesPlaceholder': 'e.g. nuts, lactose',
+	'onboarding.allergiesLabel': 'Allergies / things you avoid',
+	'onboarding.allergiesPlaceholder': 'e.g. nuts',
+	'onboarding.allergiesHint':
+		'Type and press Enter to add. Recipes containing these ingredients are kept out of your plan.',
+	'onboarding.allergyRemove': 'Remove: {name}',
 	'onboarding.goalHeading': "What's your goal?",
 	'onboarding.goal.weight_loss': 'Weight loss',
 	'onboarding.goal.easy_digestion': 'Easy digestion',
@@ -518,6 +525,7 @@ const en = {
 	'plan.pickerClose': 'Close',
 	'plan.pickerCloseAria': 'Close recipe picker',
 	'plan.pickerEmpty': 'No recipes match your equipment.',
+	'plan.pickerEmptyAllergies': 'Every available recipe contains an ingredient you listed as an allergy.',
 	'plan.pickerChangeProfile': 'Change profile',
 
 	'shopping.title': 'Shopping list',
