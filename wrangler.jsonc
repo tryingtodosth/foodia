@@ -20,20 +20,26 @@
 			"database_id": "6bacf9d0-b5c2-4643-9e14-e1bf39ceee84",
 			"migrations_dir": "drizzle"
 		}
-	],
-	// R2 (Session 26) — real object storage for recipe photos, the "FUTURES.md 9.5 / Phase 2 R2
-	// uploads" item, built now because the upload permission asked for is meaningless without a
-	// real upload behind it. The bucket is PRIVATE (no public r2.dev domain, no custom domain):
-	// bytes are served back through this app's own `/api/media/[key]` route instead, so there is
-	// exactly one way in (POST /api/uploads, session + can_upload required) and one way out, both
-	// of them code in this repo. Create it once per environment with:
-	//   npx wrangler r2 bucket create foodia-media
-	// `--local`/`vite dev` simulates the bucket on disk under .wrangler/ and never calls
-	// Cloudflare's API, exactly as the D1 binding above already does.
-	"r2_buckets": [
-		{
-			"binding": "MEDIA",
-			"bucket_name": "foodia-media"
-		}
 	]
+	// R2 (Session 26) — DELIBERATELY NOT BOUND IN PRODUCTION, see below. The code for it is real and
+	// unchanged: POST /api/uploads and GET /api/media/[key] (private bucket, exactly one way in and
+	// one way out, both code in this repo, per FUTURES.md 9.5 / Phase 2).
+	//
+	// The binding is removed rather than the feature, because a Pages deploy fails outright when a
+	// declared binding names a bucket that doesn't exist — and R2 is not enabled on this Cloudflare
+	// account (`wrangler r2 bucket create` returns code 10042, "Please enable R2 through the
+	// Cloudflare Dashboard"). Enabling it requires taking on a subscription with no hard spend cap;
+	// Cloudflare offers usage *notifications* but no mechanism that stops the service at the free
+	// tier, which is a real, deliberate cost decision rather than a technical one.
+	//
+	// Nothing regresses by removing it. Both routes already guard the binding's absence
+	// (`if (!platform?.env?.MEDIA)` → 503), uploads have never been deployed to production at all,
+	// and the feature is gated behind a `can_upload` permission that is off for every account in the
+	// database. No existing comment row carries an image_url, so nothing 404s either.
+	//
+	// To re-enable, once R2 is switched on for the account:
+	//   npx wrangler r2 bucket create foodia-media
+	// then restore this block:
+	//   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "foodia-media" }]
+	// (note the comma that must go back on the d1_databases array above).
 }
