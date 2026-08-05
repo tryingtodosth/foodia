@@ -45,6 +45,11 @@ function toNodeComment(row: typeof schema.comments.$inferSelect, author: UserRef
 		// gets the tombstone flag and nothing else.
 		content: removed ? '' : row.content,
 		visibility: row.visibility,
+		// Session 27 — an attached photo is content too, so a removal has to take it along with the
+		// text. Leaving it would render a moderator-removed image directly under a tombstone saying
+		// the comment is gone, which is worse than not having removal at all.
+		kind: row.kind,
+		imageUrl: removed ? undefined : (row.imageUrl ?? undefined),
 		author,
 		reactions: { upCount: row.upCount, downCount: row.downCount, currentUserReaction: null },
 		createdAt: row.createdAt,

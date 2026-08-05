@@ -74,12 +74,26 @@
 {#if status === 'removed'}
 	<p class="node-comment node-comment--removed">🚫 {t('moderation.commentRemoved')}</p>
 {:else}
-	<p class="node-comment" class:private={comment.visibility === 'private'}>
+	<p
+		class="node-comment"
+		class:private={comment.visibility === 'private'}
+		class:story={comment.kind === 'story'}
+	>
 		<span class="node-comment__head">
-			{comment.visibility === 'private' ? '🔒' : '💬'}
+			<!-- A story gets its own mark even when it's private: the icon says what this IS, the
+			     italic/muted treatment above says who can see it — two different facts, and collapsing
+			     them would make a private story indistinguishable from a private one-line note. -->
+			{comment.visibility === 'private' ? '🔒' : comment.kind === 'story' ? '📖' : '💬'}
 			<strong><a href={`/users/${comment.author.id}`}>{comment.author.displayName}</a>:</strong>
 		</span>
 		{comment.content}
+		{#if comment.imageUrl}
+			<!-- Deliberately no `loading="lazy"`: these render inside an already-collapsed thread, so
+			     they're only in the DOM once someone has opened it and is looking straight at them.
+			     Empty alt — the comment text beside it is the description; a generated one ("photo by
+			     Ania") would be noise a screen reader has to sit through on every single row. -->
+			<img class="node-comment__photo" src={comment.imageUrl} alt="" />
+		{/if}
 		{#if comment.visibility === 'public'}
 			<!-- Voting on your own private note would be meaningless — only public, community-facing
 			     suggestions get upvote/downvote (CLAUDE.md 4.4/6.4). Same reasoning applies to
@@ -146,9 +160,31 @@
 			color: var(--text-secondary);
 			font-style: italic;
 		}
+		&.story {
+			// A story is prose, not a one-liner — it gets room to breathe and a left rule marking it
+			// as a different kind of contribution, without changing the type size the rest of the
+			// thread reads at.
+			display: block;
+			margin-top: var(--space-2);
+			padding: var(--space-2) var(--space-3);
+			border-left: 2px solid var(--accent);
+			background: var(--bg-surface-alt);
+			border-radius: 0 var(--radius-card) var(--radius-card) 0;
+			line-height: 1.5;
+		}
 	}
 	.node-comment__head {
 		display: contents;
+	}
+	.node-comment__photo {
+		// `flex-basis: 100%` puts the photo on its own line inside the flex row rather than squeezed
+		// beside the text — and is a no-op under `.story`'s `display: block`, where it already is.
+		flex-basis: 100%;
+		max-width: 220px;
+		max-height: 180px;
+		object-fit: cover;
+		border-radius: var(--radius-card);
+		margin-top: var(--space-1);
 	}
 	.report-toggle,
 	.report-status {

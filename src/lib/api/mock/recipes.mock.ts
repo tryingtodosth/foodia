@@ -96,29 +96,39 @@ export const spaghettiBolognese: RecipeDetail = {
 		}
 	],
 	steps: [
+		// Session 27 — a genuine prep instruction that names no ingredient. It's what the tabular
+		// summary renders as a full-width banner row above the table (exactly as the reference
+		// guide's "preheat oven to 350°F" does), and this fixture is the only place in the corpus
+		// that exercises that branch.
+		{
+			id: 'st0',
+			order: 1,
+			text: 'Nastaw duży garnek osolonej wody na makaron.',
+			ingredientIds: []
+		},
 		{
 			id: 'st1',
-			order: 1,
+			order: 2,
 			text: 'Cebulę i czosnek drobno posiekaj, podsmaż na oliwie na złoty kolor.',
 			ingredientIds: ['i3', 'i4']
 		},
 		{
 			id: 'st2',
-			order: 2,
+			order: 3,
 			text: 'Dodaj mięso mielone, smaż aż się zrumieni.',
 			durationMinutes: 8,
 			ingredientIds: ['i1']
 		},
 		{
 			id: 'st3',
-			order: 3,
+			order: 4,
 			text: 'Wlej passatę, przypraw solą i pieprzem, duś pod przykryciem.',
 			durationMinutes: 15,
 			ingredientIds: ['i2']
 		},
 		{
 			id: 'st4',
-			order: 4,
+			order: 5,
 			text: 'Ugotuj spaghetti al dente w osolonej wodzie.',
 			durationMinutes: 9,
 			requiresEquipment: [],
@@ -126,7 +136,7 @@ export const spaghettiBolognese: RecipeDetail = {
 		},
 		{
 			id: 'st5',
-			order: 5,
+			order: 6,
 			text: 'Połącz makaron z sosem, podawaj od razu.',
 			ingredientIds: ['i5', 'i2']
 		}
@@ -152,6 +162,20 @@ export const spaghettiBolognese: RecipeDetail = {
 			visibility: 'private',
 			author: piotr,
 			createdAt: '2026-04-11T18:20:00Z'
+		},
+		// Session 27 — the two new comment kinds, so the ingredient sheet has something real to
+		// render for both. A story carries no photo and a photo needs no story: they're independent,
+		// which is exactly why they're two fields on one comment rather than two separate features.
+		{
+			id: 'c3',
+			target: { type: 'ingredient', id: 'i2' },
+			content:
+				'Babcia zawsze mówiła, żeby brać passatę w butelce, nie w kartonie — kartonowa jest wodnista i sos nigdy nie gęstnieje tak jak trzeba. Kupuję ją od tej samej pani na Kleparzu od piętnastu lat.',
+			visibility: 'public',
+			kind: 'story',
+			author: ania,
+			reactions: { upCount: 14, downCount: 0, currentUserReaction: null },
+			createdAt: '2026-05-20T12:00:00Z'
 		}
 	],
 	sourceLocale: 'pl',

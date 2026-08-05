@@ -181,6 +181,34 @@ export const mealPlanStore = {
 			)
 		}));
 	},
+	/**
+	 * Ticks a planned meal off as actually cooked (or clears the tick with `cooked: false`) — what
+	 * closes the loop from a cooking session back to the plan it came from.
+	 *
+	 * Clearing the mark deliberately does NOT put anything back into the pantry. The two actions are
+	 * genuinely separate: the deduction is undoable from the cooking session's own finish screen,
+	 * while it's still on screen and the cook can still see exactly what was spent. A "wasn't
+	 * cooked after all" tap days later has no idea what was deducted or whether anything's been
+	 * re-bought since, so silently crediting stock back would be inventing pantry contents — the
+	 * one thing this app's pantry logic has consistently refused to do.
+	 */
+	markCooked(planId: string, date: string, mealId: string, cooked: boolean): void {
+		withPlan(planId, (plan) => ({
+			...plan,
+			days: plan.days.map((d) =>
+				d.date === date
+					? {
+							...d,
+							meals: d.meals.map((m) =>
+								m.id === mealId
+									? { ...m, cookedAt: cooked ? new Date().toISOString() : undefined }
+									: m
+							)
+						}
+					: d
+			)
+		}));
+	},
 	clearDay(planId: string, date: string): void {
 		withPlan(planId, (plan) => ({
 			...plan,

@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { mealPlanStore } from '$lib/state/mealPlan.svelte';
+	import { cookingSessionStore } from '$lib/state/cookingSession.svelte';
 	import { profileStore } from '$lib/state/profile.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { isRecipeCookable } from '$lib/utils/cookability';
@@ -9,7 +10,7 @@
 	import { toISODate, mondayOf, addDays, weekDates, weekdayLabel, formatShortDate } from '$lib/utils/week';
 	import { t } from '$lib/i18n/t';
 	import type { MealSlotKind } from '$lib/types/pantry';
-	import type { RecipeCard } from '$lib/types/recipe';
+	import type { RecipeCard, RecipeDetail } from '$lib/types/recipe';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -101,7 +102,11 @@
 		filterByUiLocale(data.recipes, uiLocaleStore.locale).filter((r) => isRecipeCookable(r, hardware))
 	);
 
-	function recipeById(id: string): RecipeCard | undefined {
+	/** `data.recipes` is a full `RecipeDetail[]` (see +page.server.ts — the cookability filter needs
+	 *  each recipe's own steps), so this returns the detail shape rather than the Card it used to be
+	 *  typed as: starting a cooking session from a meal chip needs the real step count, and
+	 *  narrowing it back down to a Card here would have thrown that away for no reason. */
+	function recipeById(id: string): RecipeDetail | undefined {
 		return data.recipes.find((r) => r.id === id);
 	}
 
@@ -179,6 +184,40 @@
 	}
 	function handleBackdropKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape' || e.key === 'Enter') closePicker();
+	}
+
+	/**
+	 * Launches (or resumes) a cooking session for a specific PLANNED meal, then follows the link.
+	 *
+	 * The plan context travels in the session store, not in the URL. `/recipes/[id]/cook` has an
+	 * `entries` generator and is genuinely prerendered in the Capacitor build, and a prerendered page
+	 * can't read `page.url.searchParams` — the exact restriction `/plan`, `/shopping-list` and
+	 * `/login` each had to opt out of prerendering for (Sessions 6/8). Opting this route out too
+	 * would have been worse than a lost query string: it has a `+page.server.ts`, so the static build
+	 * would have no way to load the recipe at all. Carrying the context in the session avoids the
+	 * problem completely and survives a return visit with no query string, which a URL param can't.
+	 */
+	function startCooking(recipeId: string, date: string, mealId: string) {
+		const recipe = recipeById(recipeId);
+		if (!recipe || !plan) return;
+		cookingSessionStore.start(
+			{
+				recipeId,
+				recipeName: recipe.name,
+				// `data.recipes` is a full RecipeDetail list (see +page.server.ts — the cookability
+				// filter needs steps), so the real step count is available here without a fetch.
+				stepCount: recipe.steps.length
+			},
+			{ planContext: { planId: plan.id, date, mealId } }
+		);
+	}
+
+	/** An unfinished session for a recipe, if there is one — what makes a half-cooked meal legible
+	 *  from the plan rather than only from the recipe page. */
+	function sessionFor(recipeId: string) {
+		if (!cookingSessionStore.hydrated) return undefined;
+		const session = cookingSessionStore.forRecipe(recipeId);
+		return session && !session.finishedAt ? session : undefined;
 	}
 
 	function prevWeek() {
@@ -363,13 +402,40 @@
 					     only when the cell is empty. -->
 					{#each meals as meal (meal.id)}
 						{@const recipe = recipeById(meal.recipeId)}
+						{@const session = sessionFor(meal.recipeId)}
 						{#if recipe}
-							<div class="meal-chip">
+							<div class="meal-chip" class:meal-chip--cooked={meal.cookedAt}>
 								<a href={`/recipes/${recipe.id}`} class="meal-chip__name">{recipe.name}</a>
 								<span class="meal-chip__meta">
 									{#if recipe.costEstimate}{recipe.costEstimate.amount} PLN ·{/if}
 									{recipe.timeMinutes} min · {recipe.macros.kcal} kcal
 								</span>
+								<!-- The plan is where cooking actually starts for a planned meal — until now this
+								     cell only ever linked to the recipe, and cooking had no idea it belonged to a
+								     plan, so finishing one could never tick anything off here. -->
+								{#if meal.cookedAt}
+									<button
+										class="meal-chip__cooked"
+										title={t('plan.uncook')}
+										onclick={() => plan && mealPlanStore.markCooked(plan.id, date, meal.id, false)}
+									>
+										{t('plan.cooked')}
+									</button>
+								{:else}
+									<a
+										class="meal-chip__cook"
+										href={`/recipes/${recipe.id}/cook`}
+										title={session ? t('plan.resumeCooking') : ''}
+										onclick={() => startCooking(recipe.id, date, meal.id)}
+									>
+										{session
+											? t('plan.cookingInProgress', {
+													n: session.stepIndex + 1,
+													total: session.stepCount
+												})
+											: t('plan.cook')}
+									</a>
+								{/if}
 								<div class="meal-chip__row">
 									<label class="servings">
 										👥
@@ -683,6 +749,32 @@
 	.meal-chip__meta {
 		color: var(--text-secondary);
 		font-size: 11px;
+	}
+	.meal-chip--cooked {
+		/* Done, not gone — a cooked meal stays fully readable (it's still what you ate on Tuesday),
+		   it just stops competing for attention with the ones still to make. */
+		opacity: 0.65;
+	}
+	.meal-chip__cook,
+	.meal-chip__cooked {
+		align-self: flex-start;
+		margin-top: 2px;
+		padding: 1px 8px;
+		border-radius: var(--radius-pill);
+		font-size: 11px;
+		font-family: inherit;
+		cursor: pointer;
+		text-decoration: none;
+		border: 1px solid transparent;
+	}
+	.meal-chip__cook {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+	.meal-chip__cooked {
+		background: none;
+		border-color: var(--status-success);
+		color: var(--status-success);
 	}
 	.meal-chip__row {
 		display: flex;

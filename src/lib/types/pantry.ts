@@ -20,6 +20,13 @@ export interface MealSlot {
 	recipeId: string;
 	versionId?: string;
 	servings: number;
+	/** When this planned meal was actually cooked — the state FUTURES.md Section 1 item 4 named as
+	 *  the precursor to pantry auto-deduction ("`MealSlot` has no 'cooked' state at all today, only
+	 *  an assignment"). A timestamp rather than a boolean: "when" answers "did I already make this
+	 *  on Tuesday" as well as "is it done", and costs nothing extra to store. Absent on every meal
+	 *  planned before this existed, which is why it's optional and needs no migration — unlike `id`
+	 *  (Session 23) or the plan's own identity (Session 24), nothing reads it expecting a value. */
+	cookedAt?: string;
 }
 
 export interface MealPlanDay {
