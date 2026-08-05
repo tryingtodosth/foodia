@@ -158,6 +158,12 @@ async function main() {
 				target_id: c.target.id,
 				content: c.content,
 				visibility: c.visibility,
+				// Session 27 — `kind` has a schema default, but it's written explicitly here so a
+				// seeded story stays a story: `insertStatement` derives its column list from the FIRST
+				// row alone, so a field omitted when absent would be dropped for every row whenever the
+				// first comment happens not to carry it.
+				kind: c.kind ?? 'note',
+				image_url: c.imageUrl ?? null,
 				author_id: c.author.id,
 				up_count: c.reactions?.upCount ?? 0,
 				down_count: c.reactions?.downCount ?? 0,

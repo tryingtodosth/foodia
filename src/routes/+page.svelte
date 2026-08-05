@@ -1,6 +1,7 @@
 <script lang="ts">
 	import RecipeCard from '$lib/components/recipe/RecipeCard.svelte';
 	import FacetFilterPanel from '$lib/components/search/FacetFilterPanel.svelte';
+	import IngredientSearchPanel from '$lib/components/search/IngredientSearchPanel.svelte';
 	import { profileStore } from '$lib/state/profile.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { isRecipeCookable } from '$lib/utils/cookability';
@@ -11,6 +12,7 @@
 		distinctValues,
 		hasActiveFilters,
 		activeFilterCount,
+		distinctIngredientNames,
 		type FacetMode
 	} from '$lib/utils/recipeFilter';
 	import { t, tPlural } from '$lib/i18n/t';
@@ -31,6 +33,10 @@
 	let filters = $state(emptyRecipeFilters());
 	let tagOptions = $derived(distinctValues(localeRecipes, 'tags'));
 	let dietFlagOptions = $derived(distinctValues(localeRecipes, 'dietFlags'));
+	// Ingredient search (Session 27) works here for free because this page already loads full
+	// RecipeDetails rather than thin Cards — see +page.server.ts's own note on why (the equipment
+	// cookability check needed them first). A page that only had Cards could not offer this.
+	let ingredientOptions = $derived(distinctIngredientNames(localeRecipes));
 
 	// The hardware hard-filter (CLAUDE.md 4.1) — client-only, since the profile itself is
 	// client-only (no backend session yet, see Section 7's own note on this). Before hydration
@@ -77,6 +83,17 @@
 		{/if}
 	</summary>
 	<div class="filters__body">
+		<!-- First, because it's the filter people actually arrive with a question about ("what can I
+		     make with what's in the fridge") — tags and diet flags narrow a browse, this starts one. -->
+		<IngredientSearchPanel
+			allNames={ingredientOptions}
+			included={filters.ingredients}
+			excluded={filters.ingredientsExclude}
+			mode={filters.ingredientsMode}
+			onChange={(next) =>
+				(filters = { ...filters, ingredients: next.included, ingredientsExclude: next.excluded })}
+			onModeChange={(mode: FacetMode) => (filters = { ...filters, ingredientsMode: mode })}
+		/>
 		<FacetFilterPanel
 			heading={t('filters.tagsHeading')}
 			options={tagOptions}

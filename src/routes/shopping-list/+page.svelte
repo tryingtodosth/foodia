@@ -8,10 +8,9 @@
 	import { mealPlanStore } from '$lib/state/mealPlan.svelte';
 	import { pantryStore } from '$lib/state/pantry.svelte';
 	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
+	import DensityPrompt from '$lib/components/shared/DensityPrompt.svelte';
 	import { mockApiClient } from '$lib/api/mock';
 	import { httpApiClient } from '$lib/api/http';
-	import type { DensityClass } from '$lib/types/units';
-	import type { MessageKey } from '$lib/i18n/messages';
 
 	// See vite.config.ts's own comment — this route has no +page.server.ts (by design, its core
 	// data is client-only), so it can't learn which build target it's in from a server load the
@@ -68,14 +67,6 @@
 	);
 	let missingItems = $derived(shoppingItems.filter((i) => i.missingQuantity > 0));
 	let coveredItems = $derived(shoppingItems.filter((i) => i.missingQuantity === 0 && i.pantryQuantity > 0));
-
-	const DENSITY_CLASSES: { key: DensityClass; labelKey: string; exampleKey: string }[] = [
-		{ key: 'powdery', labelKey: 'shopping.density.powdery', exampleKey: 'shopping.density.powderyExample' },
-		{ key: 'granular', labelKey: 'shopping.density.granular', exampleKey: 'shopping.density.granularExample' },
-		{ key: 'liquid', labelKey: 'shopping.density.liquid', exampleKey: 'shopping.density.liquidExample' },
-		{ key: 'light', labelKey: 'shopping.density.light', exampleKey: 'shopping.density.lightExample' },
-		{ key: 'dense', labelKey: 'shopping.density.dense', exampleKey: 'shopping.density.denseExample' }
-	];
 
 	let listText = $derived(formatShoppingListText(missingItems, weekStart));
 
@@ -160,24 +151,10 @@
 						{#if item.unitStatus === 'needsDensity'}
 							<!-- Session 25 — the real ask this closes: instead of a dead-end "can't compare,"
 							     ask once, cache the answer per ingredient name, reuse it everywhere from then
-							     on (ingredientDensityStore, lib/utils/units.ts's own header comment). -->
-							<div class="density-prompt">
-								<span class="density-prompt__question">
-									{t('shopping.densityQuestion', { name: item.name })}
-								</span>
-								<div class="density-prompt__options">
-									{#each DENSITY_CLASSES as dc (dc.key)}
-										<button
-											type="button"
-											class="density-prompt__option"
-											onclick={() => ingredientDensityStore.classify(item.name, dc.key)}
-										>
-											{t(dc.labelKey as MessageKey)}
-											<span class="density-prompt__example">{t(dc.exampleKey as MessageKey)}</span>
-										</button>
-									{/each}
-								</div>
-							</div>
+							     on (ingredientDensityStore, lib/utils/units.ts's own header comment). Session 27
+							     moved the markup into a shared component so the ingredient sheet asks the
+							     identical question against the identical store. -->
+							<DensityPrompt ingredientName={item.name} />
 						{/if}
 						<div class="shopping-item__meta">
 							<span class="used-in">{t('shopping.usedIn', { names: item.usedInRecipeNames.join(', ') })}</span>
@@ -296,48 +273,6 @@
 			background: var(--status-success);
 			color: white;
 		}
-	}
-	.density-prompt {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-card);
-		background: var(--bg-surface-alt);
-		font-size: 13px;
-	}
-	.density-prompt__question {
-		color: var(--text-secondary);
-	}
-	.density-prompt__options {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-	.density-prompt__option {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		padding: var(--space-1) var(--space-2);
-		border-radius: var(--radius-card);
-		border: 1px solid var(--bg-surface);
-		background: var(--bg-surface);
-		cursor: pointer;
-		font-family: inherit;
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-primary);
-
-		&:hover {
-			border-color: var(--accent);
-			color: var(--accent);
-		}
-	}
-	.density-prompt__example {
-		font-size: 11px;
-		font-weight: 400;
-		color: var(--text-secondary);
 	}
 	.shopping-item__meta {
 		display: flex;

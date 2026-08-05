@@ -34,7 +34,9 @@
 			existing = profileStore.profile;
 			if (existing) {
 				diet = existing.diet.diet;
-				allergiesText = existing.diet.allergies.join(', ');
+				// Copied, not aliased — editing the chip list must not mutate the saved profile's own
+				// array in place before the user has actually clicked "Gotowe".
+				allergies = [...existing.diet.allergies];
 				goals = existing.diet.goals;
 				hardware = existing.hardware;
 			}
@@ -77,8 +79,54 @@
 	// and never update, the same state_referenced_locally trap /plan's own budgetInput already
 	// documents hitting and fixing this same way.
 	let diet = $state('omnivore');
-	let allergiesText = $state('');
+	// A real list, not a comma-separated string that only becomes a list at submit time. This is the
+	// one field on this form that feeds a hard safety guardrail (CLAUDE.md 4.1) rather than a
+	// preference, and the string form hid genuine mistakes until after saving: a trailing comma
+	// produced a blank entry, and a typo was invisible in a run-on line of text. Chips make each
+	// entry a separate, individually-removable thing the cook can actually check.
+	let allergies = $state<string[]>([]);
+	let allergyInput = $state('');
 	let goals = $state<string[]>([]);
+
+	/** Case-insensitively already present? Prevents "Orzechy" and "orzechy" becoming two chips that
+	 *  filter identically — the same fold-and-dedupe call `distinctIngredientNames` already makes. */
+	function alreadyListed(value: string): boolean {
+		const needle = value.trim().toLowerCase();
+		return allergies.some((a) => a.trim().toLowerCase() === needle);
+	}
+
+	/** Splits on commas as well as taking the whole field, so pasting "orzechy, laktoza" from an old
+	 *  profile (or from anywhere else) still produces two chips rather than one nonsense entry. */
+	function commitAllergyInput() {
+		const parts = allergyInput
+			.split(',')
+			.map((p) => p.trim())
+			.filter(Boolean);
+		for (const part of parts) {
+			if (!alreadyListed(part)) allergies = [...allergies, part];
+		}
+		allergyInput = '';
+	}
+
+	function removeAllergy(value: string) {
+		allergies = allergies.filter((a) => a !== value);
+	}
+
+	function handleAllergyKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' || e.key === ',') {
+			// Enter would submit an enclosing form / do nothing useful, and a comma is the separator
+			// itself rather than a character to type into the chip.
+			e.preventDefault();
+			commitAllergyInput();
+			return;
+		}
+		// Backspace on an empty field removes the last chip — the standard behaviour for this control
+		// everywhere else, and the only way to correct a mistyped entry without reaching for the mouse.
+		if (e.key === 'Backspace' && allergyInput === '' && allergies.length > 0) {
+			e.preventDefault();
+			allergies = allergies.slice(0, -1);
+		}
+	}
 	let hardware = $state<HardwareProfile>({
 		oven: false,
 		microwave: false,
@@ -99,12 +147,13 @@
 	}
 
 	function finish() {
+		// A cook who typed "orzechy" and clicked "Gotowe" without pressing Enter first has plainly
+		// declared that allergy. Silently dropping it is the one failure this whole form can't afford
+		// — an under-declared allergy is exactly what the downstream guardrail then fails to catch.
+		commitAllergyInput();
 		const dietProfile: DietProfile = {
 			diet,
-			allergies: allergiesText
-				.split(',')
-				.map((a) => a.trim())
-				.filter(Boolean),
+			allergies: [...allergies],
 			goals
 		};
 		const profile: UserProfile = {
@@ -138,14 +187,35 @@
 				</label>
 			{/each}
 		</div>
-		<label class="field">
-			{t('onboarding.allergiesLabel')}
+		<div class="field">
+			<label class="field__label" for="allergy-input">{t('onboarding.allergiesLabel')}</label>
+			{#if allergies.length > 0}
+				<ul class="chips">
+					{#each allergies as allergy (allergy)}
+						<li class="chip">
+							<span class="chip__text">{allergy}</span>
+							<button
+								type="button"
+								class="chip__remove"
+								onclick={() => removeAllergy(allergy)}
+								aria-label={t('onboarding.allergyRemove', { name: allergy })}
+							>
+								✕
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			<input
+				id="allergy-input"
 				type="text"
-				bind:value={allergiesText}
+				bind:value={allergyInput}
+				onkeydown={handleAllergyKeydown}
+				onblur={commitAllergyInput}
 				placeholder={t('onboarding.allergiesPlaceholder')}
 			/>
-		</label>
+			<p class="hint">{t('onboarding.allergiesHint')}</p>
+		</div>
 	</section>
 {:else if step === 2}
 	<section>
@@ -243,6 +313,60 @@
 			border: 1px solid var(--bg-surface-alt);
 			font-size: 14px;
 			font-family: inherit;
+		}
+	}
+	.field__label {
+		font-size: 14px;
+	}
+	/* Chips sit between the label and the input, so the list a cook has built reads as belonging to
+	   the field rather than as separate content underneath it. */
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1);
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		padding: 4px 4px 4px var(--space-2);
+		background: var(--bg-surface-alt);
+		border-radius: 999px;
+		font-size: 13px;
+		line-height: 1.4;
+		/* An allergy is a hard constraint, so a chip is deliberately not styled like the neutral
+		   `.option` rows above it — it should read as a declared rule, not another checkbox. */
+		max-width: 100%;
+	}
+	.chip__text {
+		overflow-wrap: anywhere;
+	}
+	.chip__remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		/* 24px, not the 44px touch target used for primary actions: this control sits inside a
+		   compact inline list, and a full-size hit area would make the chips unreadable. Padding on
+		   the chip itself keeps the tappable area comfortably larger than the glyph. */
+		width: 24px;
+		height: 24px;
+		flex-shrink: 0;
+		border: none;
+		border-radius: 50%;
+		background: transparent;
+		color: var(--text-secondary);
+		font-size: 12px;
+		font-family: inherit;
+		line-height: 1;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: var(--bg-surface);
+			color: var(--text-primary);
 		}
 	}
 	.hint {

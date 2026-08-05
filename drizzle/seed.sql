@@ -1,6 +1,6 @@
 INSERT INTO users (id, email, password_hash, display_name, avatar_url, is_moderator, created_at) VALUES
-	('u1', 'piotr@foodia.net', '600000:7ecb9d9cd302894814e8381d35958161:774b53958a4daa17b5afbeb4b8cd04cee9f60e74c3a297d5de7ee3fe55c1520d', 'Piotr P.', NULL, 1, '2026-07-29T00:00:00Z'),
-	('u2', 'ania@foodia.net', '600000:739bc36799d7a92ed07ecd3463c342b3:91af239fbc647bb6025a4ba6e59289e3f1e089ec0fd45b42af4f149336214a4e', 'Ania K.', NULL, 0, '2026-07-29T00:00:00Z');
+	('u1', 'piotr@foodia.net', '100000:d805ce4b9351e7a214b0277f43895a19:405abbe68a8e463b19567bbc96c9e05290707ad05bb929d27fb751ef927b4129', 'Piotr P.', NULL, 1, '2026-07-29T00:00:00Z'),
+	('u2', 'ania@foodia.net', '100000:03b897d40e783f1da4834201bb0ffe1d:1f95726da9180dc613762952ae65a02871e234c14601210108f779c399489278', 'Ania K.', NULL, 0, '2026-07-29T00:00:00Z');
 
 INSERT INTO recipes (id, name, summary, description, hero_image, author_id, tags, diet_flags, required_equipment, time_minutes, cost_amount, cost_currency, kcal, protein_g, fat_g, carbs_g, up_count, down_count, source_locale, created_at, updated_at) VALUES
 	('r1', 'Spaghetti Bolognese w 30 minut', 'Klasyczny sos mięsny na co dzień — bez godzinnego duszenia.', 'Szybka wersja tradycyjnego sosu bolognese, zoptymalizowana pod dzień powszedni: mniej duszenia, więcej smaku dzięki skoncentrowanemu przecierowi pomidorowemu i dobrze zredukowanemu winu.', '/recipes/bolognese.jpg', 'u1', '["włoskie","makaron","na-co-dzien"]', '[]', '[]', 30, 18, 'PLN', 620, 32, 22, 68, 41, 2, 'pl', '2026-01-10T00:00:00Z', '2026-06-01T00:00:00Z'),
@@ -34,11 +34,12 @@ INSERT INTO substitutions (id, for_ingredient_id, name, ratio, delta_macros, up_
 	('s5', 'i12', 'Papryka słodka', 1, NULL, 0, 0, 'system', NULL);
 
 INSERT INTO steps (id, recipe_id, order_index, text, duration_minutes, requires_equipment, ingredient_ids) VALUES
-	('st1', 'r1', 0, 'Cebulę i czosnek drobno posiekaj, podsmaż na oliwie na złoty kolor.', NULL, NULL, '["i3","i4"]'),
-	('st2', 'r1', 1, 'Dodaj mięso mielone, smaż aż się zrumieni.', 8, NULL, '["i1"]'),
-	('st3', 'r1', 2, 'Wlej passatę, przypraw solą i pieprzem, duś pod przykryciem.', 15, NULL, '["i2"]'),
-	('st4', 'r1', 3, 'Ugotuj spaghetti al dente w osolonej wodzie.', 9, '[]', '["i5"]'),
-	('st5', 'r1', 4, 'Połącz makaron z sosem, podawaj od razu.', NULL, NULL, '["i5","i2"]'),
+	('st0', 'r1', 0, 'Nastaw duży garnek osolonej wody na makaron.', NULL, NULL, '[]'),
+	('st1', 'r1', 1, 'Cebulę i czosnek drobno posiekaj, podsmaż na oliwie na złoty kolor.', NULL, NULL, '["i3","i4"]'),
+	('st2', 'r1', 2, 'Dodaj mięso mielone, smaż aż się zrumieni.', 8, NULL, '["i1"]'),
+	('st3', 'r1', 3, 'Wlej passatę, przypraw solą i pieprzem, duś pod przykryciem.', 15, NULL, '["i2"]'),
+	('st4', 'r1', 4, 'Ugotuj spaghetti al dente w osolonej wodzie.', 9, '[]', '["i5"]'),
+	('st5', 'r1', 5, 'Połącz makaron z sosem, podawaj od razu.', NULL, NULL, '["i5","i2"]'),
 	('st6', 'r2', 0, 'Wszystkie składniki wymieszaj w słoiku.', NULL, NULL, '["i6","i7","i8","i9"]'),
 	('st7', 'r2', 1, 'Odstaw w lodówce na noc (minimum 6 godzin).', 360, NULL, '[]'),
 	('st8', 'r3', 0, 'Bataty pokrój w słupki, wymieszaj z oliwą i przyprawami.', NULL, NULL, '["i10","i11","i12"]'),
@@ -48,9 +49,10 @@ INSERT INTO step_alternatives (id, for_step_id, text, requires_equipment, durati
 	('sa1', 'st9', 'Piecz w piekarniku nagrzanym do 220°C (termoobieg) przez 25 minut, obracając w połowie.', '["oven"]', 25, 14, 1, 'system', NULL),
 	('sa2', 'st9', 'Smaż na patelni z odrobiną oleju na średnim ogniu, mieszając co kilka minut, aż się zarumienią.', NULL, NULL, 3, 2, 'community', 'u1');
 
-INSERT INTO comments (id, recipe_id, target_type, target_id, content, visibility, author_id, up_count, down_count, created_at) VALUES
-	('c1', 'r1', 'ingredient', 'i4', 'Dawajcie śmiało 4 ząbki zamiast 2 — dużo lepiej wychodzi.', 'public', 'u2', 9, 0, '2026-03-02T10:00:00Z'),
-	('c2', 'r1', 'step', 'st3', 'Mój piekarnik... to znaczy garnek, potrzebuje tu 20 minut, a nie 15.', 'private', 'u1', 0, 0, '2026-04-11T18:20:00Z');
+INSERT INTO comments (id, recipe_id, target_type, target_id, content, visibility, kind, image_url, author_id, up_count, down_count, created_at) VALUES
+	('c1', 'r1', 'ingredient', 'i4', 'Dawajcie śmiało 4 ząbki zamiast 2 — dużo lepiej wychodzi.', 'public', 'note', NULL, 'u2', 9, 0, '2026-03-02T10:00:00Z'),
+	('c2', 'r1', 'step', 'st3', 'Mój piekarnik... to znaczy garnek, potrzebuje tu 20 minut, a nie 15.', 'private', 'note', NULL, 'u1', 0, 0, '2026-04-11T18:20:00Z'),
+	('c3', 'r1', 'ingredient', 'i2', 'Babcia zawsze mówiła, żeby brać passatę w butelce, nie w kartonie — kartonowa jest wodnista i sos nigdy nie gęstnieje tak jak trzeba. Kupuję ją od tej samej pani na Kleparzu od piętnastu lat.', 'public', 'story', NULL, 'u2', 14, 0, '2026-05-20T12:00:00Z');
 
 INSERT INTO translations (id, recipe_id, locale, fields, translated_by_id, up_count, down_count, created_at) VALUES
 	('tr1', 'r1', 'en', '{"name":"Spaghetti Bolognese in 30 Minutes","summary":"A classic everyday meat sauce — no hour-long simmering required.","description":"A quick take on the traditional bolognese sauce, optimized for a weekday: less simmering, more flavor thanks to concentrated tomato paste and a well-reduced wine."}', 'u2', 6, 0, '2026-05-01T09:00:00Z'),

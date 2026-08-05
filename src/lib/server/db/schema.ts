@@ -162,6 +162,21 @@ export const comments = sqliteTable('comments', {
 	targetId: text('target_id').notNull(),
 	content: text('content').notNull(),
 	visibility: text('visibility', { enum: ['public', 'private'] }).notNull(),
+	// Session 27 — photos and stories on an ingredient. Deliberately two columns on `comments`
+	// rather than two new tables: a photo of what the ingredient actually looked like, and the story
+	// of where it came from, are both "somebody said something about this node" — they already need
+	// every single thing a comment has (an author, a target, a timestamp, reactions, reporting,
+	// moderator removal). A parallel `ingredient_photos` table would have had to re-earn all of it,
+	// and would have left a photo un-reportable, which is not a corner an app accepting real uploads
+	// can afford. `image_url` holds a `/api/media/[key]` path from the existing R2 upload route —
+	// never raw bytes, and never an off-site URL this app couldn't take down.
+	imageUrl: text('image_url'),
+	// 'note' is the ordinary comment every existing row already is (hence the default — the
+	// migration must not have to guess at, or rewrite, a single historical row). 'story' is
+	// longer-form provenance; it changes how the comment renders, nothing about who may write it.
+	kind: text('kind', { enum: ['note', 'story'] })
+		.notNull()
+		.default('note'),
 	authorId: text('author_id')
 		.notNull()
 		.references(() => users.id),

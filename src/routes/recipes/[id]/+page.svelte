@@ -12,18 +12,35 @@
 	} from '$lib/utils/stepAlternative';
 	import { currentUserRef, profileStore } from '$lib/state/profile.svelte';
 	import { authStore } from '$lib/state/auth.svelte';
+	import { pantryStore } from '$lib/state/pantry.svelte';
+	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
 	import { sessionStepAlternativesStore } from '$lib/state/stepAlternatives.svelte';
+	import { cookingSessionStore } from '$lib/state/cookingSession.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
+	import { page } from '$app/state';
 	import ReactionButtons from '$lib/components/comments/ReactionButtons.svelte';
 	import CommentItem from '$lib/components/comments/CommentItem.svelte';
 	import CommentComposer from '$lib/components/comments/CommentComposer.svelte';
 	import TranslationBadge from '$lib/components/recipe/TranslationBadge.svelte';
 	import SuggestTranslationModal from '$lib/components/recipe/SuggestTranslationModal.svelte';
-	import SubstitutionComposer from '$lib/components/recipe/SubstitutionComposer.svelte';
+	import RecipeMatrix from '$lib/components/recipe/RecipeMatrix.svelte';
+	import IngredientSheet from '$lib/components/recipe/IngredientSheet.svelte';
 	import StepAlternativeComposer from '$lib/components/recipe/StepAlternativeComposer.svelte';
 	import { resolveRecipeVersion, getRecipeVersions } from '$lib/utils/translations';
+	import { buildRecipeMatrix } from '$lib/utils/recipeMatrix';
+	import { pantryStatusFor, type PantryCoverage } from '$lib/utils/pantryStatus';
+	import { formatQuantity } from '$lib/utils/units';
 	import { t } from '$lib/i18n/t';
-	import type { NodeComment, NodeType, Translation, Substitution, StepAlternative, Step } from '$lib/types/recipe';
+	import type {
+		CommentKind,
+		Ingredient,
+		NodeComment,
+		NodeType,
+		Translation,
+		Substitution,
+		StepAlternative,
+		Step
+	} from '$lib/types/recipe';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -198,6 +215,35 @@
 		return sessionSubstitutions.find((s) => s.id === id);
 	}
 
+	/** An unfinished cooking session for this exact recipe, if one is waiting — what turns the cook
+	 *  CTA from "start" into "you're 3 steps in, come back". Reading it here is the cheapest possible
+	 *  resume affordance: the session store denormalizes `stepIndex`/`stepCount` precisely so a
+	 *  banner like this needs no extra fetch. */
+	let cookingSession = $derived(
+		cookingSessionStore.hydrated
+			? (() => {
+					const s = cookingSessionStore.forRecipe(recipe.id);
+					return s && !s.finishedAt ? s : undefined;
+				})()
+			: undefined
+	);
+
+	/** Hands this page's own chosen swaps to the session as its starting point. Only ever applied to
+	 *  a NEW session (`start`'s own rule) — re-entering a session already in progress must not
+	 *  overwrite what the cook has since decided at the stove with what the recipe page still has
+	 *  selected. */
+	function seedCookingSession() {
+		const substitutions: Record<string, { ingredientId: string; substitutionId: string; name: string; ratio: number }> = {};
+		for (const [ingredientId, substitutionId] of Object.entries(chosenSubstitutions)) {
+			const sub = findSubstitutionById(substitutionId);
+			if (sub) substitutions[ingredientId] = { ingredientId, substitutionId, name: sub.name, ratio: sub.ratio };
+		}
+		cookingSessionStore.start(
+			{ recipeId: recipe.id, recipeName: resolved.fields.name, stepCount: recipe.steps.length },
+			{ substitutions }
+		);
+	}
+
 	function chooseStepAlternative(stepId: string, altId: string | null) {
 		chosenStepAlternatives = { ...chosenStepAlternatives };
 		if (altId) {
@@ -257,9 +303,20 @@
 		type: NodeType,
 		id: string,
 		content: string,
-		visibility: 'public' | 'private'
+		visibility: 'public' | 'private',
+		extras?: { kind: CommentKind; imageUrl?: string }
 	): Promise<boolean> {
-		const result = await postJson('/api/comments', { recipeId: recipe.id, targetType: type, targetId: id, content, visibility });
+		const kind = extras?.kind ?? 'note';
+		const imageUrl = extras?.imageUrl;
+		const result = await postJson('/api/comments', {
+			recipeId: recipe.id,
+			targetType: type,
+			targetId: id,
+			content,
+			visibility,
+			kind,
+			imageUrl
+		});
 		if (!result) return false;
 		sessionComments = [
 			...sessionComments,
@@ -268,6 +325,8 @@
 				target: { type, id },
 				content,
 				visibility,
+				kind,
+				imageUrl,
 				author: currentUserRef(),
 				createdAt: new Date().toISOString()
 			}
@@ -283,6 +342,57 @@
 			delete chosenSubstitutions[ingredientId];
 		}
 	}
+
+	// --- The default view: the tabular summary (Session 27) -------------------------------------
+	// Built from data that already existed — `Step.ingredientIds` has been in this app's type since
+	// the Recipe Graph was designed, and this is the first thing to actually READ it for anything
+	// other than Cooking Mode's per-step highlight. See lib/utils/recipeMatrix.ts for the layout,
+	// including the one structural assumption it makes and why.
+	let matrix = $derived(buildRecipeMatrix(recipe.ingredients, recipe.steps));
+
+	/** The line the matrix prints for a row, swap-aware. Derived here rather than in the component
+	 *  so the table and the ingredient list below it can never disagree about what's in the dish. */
+	function displayFor(ingredient: Ingredient): { text: string; swapped: boolean } {
+		const chosen = substitutionsFor(ingredient.id).find(
+			(s) => s.id === chosenSubstitutions[ingredient.id]
+		);
+		if (chosen) {
+			return {
+				text: `${formatQuantity(ingredient.quantity * chosen.ratio)} ${ingredient.unit} ${chosen.name}`,
+				swapped: true
+			};
+		}
+		return {
+			text: `${formatQuantity(ingredient.quantity)} ${ingredient.unit} ${ingredient.name}`,
+			swapped: false
+		};
+	}
+
+	/** Reads the pantry through the same resolver `/shopping-list` uses, so a tick here means
+	 *  exactly what a covered row means there. Returns null until the pantry has hydrated —
+	 *  rendering "you have none of this" during SSR and the first client frame would be a claim the
+	 *  app hasn't yet checked. */
+	function pantryCoverageFor(ingredient: Ingredient): PantryCoverage | null {
+		if (!pantryStore.hydrated) return null;
+		const chosen = substitutionsFor(ingredient.id).find(
+			(s) => s.id === chosenSubstitutions[ingredient.id]
+		);
+		const effective = chosen
+			? { name: chosen.name, quantity: ingredient.quantity * chosen.ratio, unit: ingredient.unit }
+			: ingredient;
+		return pantryStatusFor(effective, pantryStore.items, ingredientDensityStore.classFor).coverage;
+	}
+
+	// Which ingredient's sheet is open. Held as an ID, not the object: the ingredient array is
+	// re-derived whenever `data` changes, and a captured object would go stale against it.
+	let sheetIngredientId = $state<string | null>(null);
+	let sheetIngredient = $derived(
+		recipe.ingredients.find((i) => i.id === sheetIngredientId) ?? null
+	);
+	$effect(() => {
+		recipe.id;
+		sheetIngredientId = null;
+	});
 </script>
 
 <!-- `authStore.hydrate()` is fire-and-forget async (auth.svelte.ts's own doc comment) — `isAuthenticated`
@@ -359,7 +469,61 @@
 	<span>🍞 {t('recipe.carbs', { n: activeMacros.carbsG })}</span>
 </div>
 
-<a class="cook-cta" href={`/recipes/${recipe.id}/cook`}>▶ {t('recipe.cookCta')}</a>
+<!-- Two things happen on this one click, in this order. First the swaps chosen on THIS page are
+     handed to the cooking session as its starting assumption — closing the second half of CLAUDE.md
+     Section 7 item 27, which deliberately left ingredient substitutions out of the cross-route fix
+     step alternatives got, on the grounds that "Cooking Mode doesn't render ingredients at all yet,
+     so there's nothing there for a session-proposed substitution to feed into." There is now.
+     Second, the link navigates as normal. Kept as an <a> rather than a button+goto so it still
+     behaves like a link (middle-click, long-press) — the store write is synchronous, so it lands
+     before any navigation, client-side or full-page. -->
+<a
+	class="cook-cta"
+	class:cook-cta--resume={cookingSession !== undefined}
+	href={`/recipes/${recipe.id}/cook`}
+	onclick={seedCookingSession}
+>
+	{#if cookingSession}
+		⏸ {t('recipe.resumeCookCta', {
+			n: cookingSession.stepIndex + 1,
+			total: cookingSession.stepCount
+		})}
+	{:else}
+		▶ {t('recipe.cookCta')}
+	{/if}
+</a>
+
+<!-- The default view, at the top, before any prose: what goes in with what, and in what order.
+     Everything below it is the same recipe in longer form. -->
+<section class="summary-section">
+	<h2>{t('matrix.heading')}</h2>
+	<RecipeMatrix
+		{matrix}
+		{displayFor}
+		coverageFor={pantryCoverageFor}
+		noteCountFor={(ingredient) => commentsFor('ingredient', ingredient.id).length}
+		onselect={(ingredient) => (sheetIngredientId = ingredient.id)}
+	/>
+</section>
+
+{#if sheetIngredient}
+	<!-- Bound to a `const` rather than used directly, so the callbacks below close over a value
+	     TypeScript has genuinely narrowed instead of a reassignable `Ingredient | null`. -->
+	{@const openIngredient = sheetIngredient}
+	<IngredientSheet
+		ingredient={openIngredient}
+		recipeId={recipe.id}
+		recipeName={resolved.fields.name}
+		substitutions={substitutionsFor(openIngredient.id)}
+		chosenSubstitutionId={chosenSubstitutions[openIngredient.id] ?? null}
+		{commentsFor}
+		canUpload={page.data.canUpload === true}
+		onchoose={(substitutionId) => chooseSubstitution(openIngredient.id, substitutionId)}
+		onpropose={(name, ratio) => proposeSubstitution(openIngredient.id, name, ratio)}
+		onaddcomment={addComment}
+		onclose={() => (sheetIngredientId = null)}
+	/>
+{/if}
 
 <!-- One prompt for the whole page, not one per composer (this page's original per-gate version —
      one `{@render loginPrompt()}` at every propose/comment composer, including inside each
@@ -373,17 +537,30 @@
 
 <section>
 	<h2>{t('recipe.ingredientsHeading')}</h2>
+	<!-- Session 27 — every per-ingredient control (swap picker, propose-a-swap, the comment thread
+	     and its composer, plus each swap's own discussion) moved into `IngredientSheet`, which is
+	     what "touching an ingredient opens a modal" asks for. This list is deliberately NOT a second
+	     place to do the same things: keeping both would mean two swap pickers on one page that can
+	     disagree, and it's exactly what made this page render the same login prompt 22 times before.
+	     What stays here is the canonical, linear, printable ingredient list — the thing the matrix
+	     above is a summary OF. -->
 	<ul class="ingredients">
 		{#each recipe.ingredients as ingredient (ingredient.id)}
 			{@const visibleSubs = substitutionsFor(ingredient.id)}
 			{@const chosenId = chosenSubstitutions[ingredient.id]}
 			{@const chosen = visibleSubs.find((s) => s.id === chosenId)}
+			{@const notes = commentsFor('ingredient', ingredient.id).length}
+			{@const coverage = pantryCoverageFor(ingredient)}
 			<li class="ingredient">
-				<div class="ingredient__row">
+				<button
+					type="button"
+					class="ingredient__row"
+					onclick={() => (sheetIngredientId = ingredient.id)}
+				>
 					<span>
 						{#if chosen}
 							<s class="muted">{ingredient.quantity} {ingredient.unit} {ingredient.name}</s>
-							→ {ingredient.quantity * chosen.ratio}
+							→ {formatQuantity(ingredient.quantity * chosen.ratio)}
 							{ingredient.unit}
 							{chosen.name}
 							{#if substitutionModerationStore.isRecognized(chosen.id)}
@@ -393,62 +570,28 @@
 							{ingredient.quantity} {ingredient.unit} {ingredient.name}
 						{/if}
 					</span>
-					{#if ingredient.substitutable}
-						<details class="swap">
-							<summary>{t('recipe.swap')}</summary>
-							<ul>
-								<li class="swap-row">
-									<button class="swap-choose" onclick={() => chooseSubstitution(ingredient.id, null)}>
-										{t('recipe.original')}
-									</button>
-								</li>
-								<!-- Sorted once at render time by the substitution's own base reaction score
-								     (sortSubstitutionsByReaction) and deliberately frozen there — re-sorting live
-								     as the viewer votes would make rows jump under their cursor mid-click. Already
-								     allergy-filtered by `substitutionsFor` before it ever reaches this list — the
-								     guardrail never depends on this markup remembering to check it. -->
-								{#each sortSubstitutionsByReaction(visibleSubs) as sub (sub.id)}
-									<li class="swap-row swap-row--column">
-										<div class="swap-row__main">
-											<button class="swap-choose" onclick={() => chooseSubstitution(ingredient.id, sub.id)}>
-												{sub.name}
-												{#if substitutionModerationStore.isRecognized(sub.id)}
-													<span class="recognized-badge" title={t('moderation.recognizedBadge')}>⭐</span>
-												{/if}
-											</button>
-											<ReactionButtons reactions={sub.reactions} compact />
-										</div>
-										{#if sub.proposedBy}
-											<a class="proposed-by" href={`/users/${sub.proposedBy.id}`}>
-												{t('substitution.proposedBy', { name: sub.proposedBy.displayName })}
-											</a>
-										{/if}
-										<!-- The ask this closes: "alternatives to certain ingredients need to be able
-										     to be discussed by users" — each swap option gets its own real thread, not
-										     just the parent ingredient's. -->
-										{@render discussionThread('substitution', sub.id, sub.name)}
-									</li>
-								{/each}
-							</ul>
-						</details>
-					{/if}
-				</div>
-				{#if ingredient.substitutable && authStore.hydrated && authStore.isAuthenticated}
-					<SubstitutionComposer
-						onsubmit={(name, ratio) => proposeSubstitution(ingredient.id, name, ratio)}
-					/>
-				{/if}
-				{#each commentsFor('ingredient', ingredient.id) as comment (comment.id)}
-					<CommentItem
-						{comment}
-						context={{ recipeId: recipe.id, recipeName: resolved.fields.name, targetLabel: ingredient.name }}
-					/>
-				{/each}
-				{#if authStore.hydrated && authStore.isAuthenticated}
-					<CommentComposer
-						onsubmit={(content, visibility) => addComment('ingredient', ingredient.id, content, visibility)}
-					/>
-				{/if}
+					<span class="ingredient__marks">
+						{#if coverage === 'enough'}
+							<span class="mark mark--enough" title={t('matrix.pantryEnough')}>✓</span>
+						{:else if coverage === 'partial' || coverage === 'unresolved'}
+							<span
+								class="mark mark--partial"
+								title={coverage === 'partial'
+									? t('matrix.pantryPartial')
+									: t('matrix.pantryUnresolved')}
+							>
+								{coverage === 'partial' ? '◐' : '?'}
+							</span>
+						{/if}
+						{#if notes > 0}
+							<span class="mark">💬{notes}</span>
+						{/if}
+						{#if visibleSubs.length > 0}
+							<span class="mark">🔀{visibleSubs.length}</span>
+						{/if}
+						<span class="ingredient__open">{t('recipe.openIngredient')}</span>
+					</span>
+				</button>
 			</li>
 		{/each}
 	</ul>
@@ -610,6 +753,11 @@
 		color: white;
 		font-weight: 600;
 		text-decoration: none;
+
+		/* A session left mid-recipe reads as unfinished business, not as a fresh start. */
+		&--resume {
+			background: var(--status-warning);
+		}
 	}
 	.ingredients,
 	.steps {
@@ -626,6 +774,46 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--space-3);
+		width: 100%;
+		background: none;
+		border: none;
+		padding: var(--space-1) 0;
+		font-family: inherit;
+		font-size: inherit;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+
+		&:hover .ingredient__open,
+		&:focus-visible .ingredient__open {
+			color: var(--accent);
+		}
+	}
+	.ingredient__marks {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-shrink: 0;
+	}
+	.mark {
+		font-size: 11px;
+		color: var(--text-secondary);
+	}
+	.mark--enough {
+		color: var(--status-success);
+		font-weight: 700;
+	}
+	.mark--partial {
+		color: var(--status-warning);
+		font-weight: 700;
+	}
+	.ingredient__open {
+		font-size: 12px;
+		color: var(--text-secondary);
+	}
+	.summary-section h2 {
+		font-size: 16px;
+		margin-bottom: var(--space-2);
 	}
 	.muted {
 		color: var(--text-secondary);

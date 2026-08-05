@@ -50,8 +50,14 @@ export function isEligibleForRecognition(sub: Substitution): boolean {
  * genuinely unsafe one). Found and fixed during this module's own verification pass, not shipped
  * broken — see lib/api/mock/recipes.mock.ts's own peanut-milk fixture, the concrete case that
  * caught it.
+ *
+ * Exported (Session 29) because the identical question — "does this food name name this allergen?"
+ * — is now asked at recipe level too (`recipeFilter.ts`'s `isRecipeAllergySafe`), and the answer must
+ * be the same one in both places. A second copy of this heuristic would be free to drift, and the
+ * failure mode of a *drifted* allergy check is that a swap is correctly hidden on the recipe page
+ * while the whole recipe is still offered by the planner — the guardrail contradicting itself.
  */
-function defaultAllergenNameMatch(subName: string, allergy: string): boolean {
+export function defaultAllergenNameMatch(subName: string, allergy: string): boolean {
 	const stem = allergy.trim().toLowerCase().slice(0, 5);
 	if (stem.length < 3) return subName.toLowerCase().includes(stem);
 	return subName

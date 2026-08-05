@@ -7,6 +7,7 @@
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { authStore } from '$lib/state/auth.svelte';
 	import { ingredientDensityStore } from '$lib/state/ingredientDensity.svelte';
+	import { cookingSessionStore } from '$lib/state/cookingSession.svelte';
 	import { commentModerationStore } from '$lib/state/commentModeration.svelte';
 	import { substitutionModerationStore } from '$lib/state/substitutionModeration.svelte';
 	import { getCookie } from '$lib/utils/cookies';
@@ -57,6 +58,10 @@
 		mealPlanStore.hydrate();
 		authStore.hydrate();
 		ingredientDensityStore.hydrate();
+		// An unfinished cooking session has to be findable from anywhere, not just from inside
+		// Cooking Mode — /plan and /recipes/[id] both offer to resume one, and neither would know a
+		// session existed if this only hydrated on the cooking screen itself.
+		cookingSessionStore.hydrate();
 		// Session 26 — both of these went from session-only in-memory state to caches of real D1
 		// rows, so they now need the same one-time hydration every other store here already had.
 		commentModerationStore.hydrate();

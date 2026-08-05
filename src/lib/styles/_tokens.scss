@@ -10,6 +10,12 @@ $text-secondary: #6b6357;
 $accent: #d9622b; // warm, food-forward orange
 $accent-soft: #f2b98a;
 
+// The recipe-matrix rule colour (Session 27). Its own token rather than reusing $bg-surface-alt:
+// that value is a FILL, chosen to sit quietly behind text, and a table whose every cell is outlined
+// in it reads as a grey smudge. This is a real line colour — dark enough to draw a grid a person can
+// follow across nine rows, light enough not to compete with the ingredient text inside it.
+$matrix-line: #c9bfae;
+
 $status-success: #4a8b3b;
 $status-warning: #d9a02b;
 $status-danger: #c0392b;

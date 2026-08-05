@@ -88,6 +88,14 @@ export interface RecipeVersion {
 	parentRecipeId: string | null;
 }
 
+/**
+ * Session 27 — what a comment IS, not who may write it. A `'story'` is the same node comment with
+ * different weight: longer-form provenance about an ingredient ("we always used the smoked kind"),
+ * rendered and surfaced differently from a quick note, and moderated identically. Absent means
+ * `'note'` — every comment written before this existed is one, and no migration has to guess.
+ */
+export type CommentKind = 'note' | 'story';
+
 export interface NodeComment {
 	id: string;
 	target: { type: NodeType; id: string };
@@ -96,6 +104,12 @@ export interface NodeComment {
 	author: UserRef;
 	reactions?: ReactionSummary;
 	createdAt: string;
+	kind?: CommentKind;
+	/** A `/api/media/[key]` path from this app's own R2 upload route — never an off-site URL, and
+	 *  never raw bytes. Absent for the overwhelming majority of comments; a comment with an image
+	 *  and no text is a legitimate "here's what mine looked like", so `content` may be empty when
+	 *  this is set (the write path enforces that at least one of the two is present). */
+	imageUrl?: string;
 	/** Session 26 — a moderator removed this comment. The read path (`dbApiClient`) blanks
 	 *  `content` before the row ever leaves the server, so this flag is all a viewer gets: it's
 	 *  what renders the tombstone ("removed by a moderator") in place of text, rather than the
