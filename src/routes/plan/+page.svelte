@@ -6,6 +6,7 @@
 	import { profileStore } from '$lib/state/profile.svelte';
 	import { uiLocaleStore } from '$lib/state/uiLocale.svelte';
 	import { isRecipeCookable } from '$lib/utils/cookability';
+	import { filterAllergySafeRecipes } from '$lib/utils/recipeFilter';
 	import { filterByUiLocale } from '$lib/utils/recipeLocale';
 	import { toISODate, mondayOf, addDays, weekDates, weekdayLabel, formatShortDate } from '$lib/utils/week';
 	import { t } from '$lib/i18n/t';
@@ -96,11 +97,30 @@
 	// someone plan a recipe into their week that their kitchen can't actually make. Session 9 —
 	// same equipment-alternative-aware reconciliation the home feed uses, see cookability.ts.
 	let hardware = $derived(profileStore.profile?.hardware ?? null);
-	// Session 24 — "when English is active, show only English recipes," applied here too: the
-	// weekly picker shouldn't offer a recipe the cook can't even read alongside ones they can.
-	let availableRecipes = $derived(
+	// The allergy guardrail (CLAUDE.md 4.1), applied at the point a recipe enters a week rather than
+	// at the point its shopping list is read. Filtering the allergen out of the list downstream would
+	// leave the recipe itself planned, cooked, and eaten — the list is the last place to catch this,
+	// and catching it there only removes the line item, not the meal.
+	//
+	// `data.recipes` is a full `RecipeDetail[]` (the cookability filter already needed each recipe's
+	// own steps, see +page.server.ts), so the ingredient names this reads are genuinely present —
+	// the exact precondition `isRecipeAllergySafe` documents needing from its caller.
+	//
+	// Applied to ONE derived rather than at each call site on purpose: `availableRecipes` is the only
+	// pool both the picker modal and `quickFill` read from, so there is no third path a future
+	// feature could add meals through while bypassing this. Same "one filtered list, not three
+	// independent checks that could drift" discipline `substitutionsFor` already establishes on the
+	// recipe page.
+	let allergies = $derived(profileStore.profile?.diet?.allergies ?? []);
+	let cookableRecipes = $derived(
 		filterByUiLocale(data.recipes, uiLocaleStore.locale).filter((r) => isRecipeCookable(r, hardware))
 	);
+	let availableRecipes = $derived(filterAllergySafeRecipes(cookableRecipes, allergies));
+	// Two causes of "nothing to pick," told apart rather than merged into the pre-existing
+	// equipment-only message — the same distinction `routes/+page.svelte` already draws between its
+	// hardware filter and its facet panel. Being told to check your equipment when the real reason is
+	// a declared allergy sends the cook to fix the wrong thing.
+	let emptyIsFromAllergies = $derived(availableRecipes.length === 0 && cookableRecipes.length > 0);
 
 	/** `data.recipes` is a full `RecipeDetail[]` (see +page.server.ts — the cookability filter needs
 	 *  each recipe's own steps), so this returns the detail shape rather than the Card it used to be
@@ -498,7 +518,10 @@
 				<button class="picker__close" onclick={closePicker} aria-label={t('plan.pickerClose')}>✕</button>
 			</div>
 			{#if availableRecipes.length === 0}
-				<p>{t('plan.pickerEmpty')} <a href="/onboarding">{t('plan.pickerChangeProfile')}</a>.</p>
+				<p>
+					{emptyIsFromAllergies ? t('plan.pickerEmptyAllergies') : t('plan.pickerEmpty')}
+					<a href="/onboarding">{t('plan.pickerChangeProfile')}</a>.
+				</p>
 			{/if}
 			<ul class="picker__list">
 				{#each availableRecipes as recipe (recipe.id)}

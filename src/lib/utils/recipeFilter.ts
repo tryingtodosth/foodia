@@ -11,6 +11,7 @@
 // facet's own included values; OR is only ever reached via an explicit, visible per-facet toggle
 // — get this right from day one rather than tuning it later.
 import type { Ingredient, RecipeCard } from '$lib/types/recipe';
+import { defaultAllergenNameMatch } from '$lib/utils/substitution';
 
 export type FacetMode = 'and' | 'or';
 
@@ -213,6 +214,61 @@ export function distinctValues(
 		for (const v of r[field]) set.add(v);
 	}
 	return [...set].sort((a, b) => a.localeCompare(b, 'pl'));
+}
+
+/**
+ * The allergy guardrail at RECIPE level (CLAUDE.md 4.1 — "a hard constraint, enforced in code,
+ * never an AI suggestion"). `filterSafeSubstitutions` has always applied this same rule to the
+ * swaps offered *inside* a recipe; this applies it one level up, to whether the recipe should be
+ * offered at all.
+ *
+ * Deliberately NOT part of `RecipeFilters` above, and deliberately not routed through
+ * `passesFilters`. Everything in that struct is a cook's browsing *preference* — freely toggled,
+ * empty by default, and correct to ignore when nothing is selected. An allergy is a safety
+ * constraint that happens to be shaped like a filter, and the two must not share a code path where
+ * a future "clear all filters" button could reach it. Same separation `routes/+page.svelte` already
+ * keeps between the hardware hard-filter and the facet panel.
+ *
+ * Matching is delegated to `defaultAllergenNameMatch` — the one, shared, Polish-declension-aware
+ * stem comparison, not a second copy (see that function's own header for why the stem approach
+ * exists and what it deliberately trades away). It errs toward over-filtering, which at recipe
+ * level means hiding a possibly-safe recipe rather than offering a possibly-unsafe one — the
+ * correct direction for a guardrail, and the same direction it already errs in for substitutions.
+ *
+ * `ingredients` is optional for the same Card/Detail reason `passesFilters` documents, but the
+ * honest consequence is the opposite one and worth stating plainly: a recipe whose ingredients
+ * simply weren't loaded is reported SAFE, because "no ingredient names to check" is genuinely not
+ * evidence of an allergen. That makes this function only as strong as its caller's data — every
+ * current caller (`/plan`, which loads `listDetails()`) passes real `RecipeDetail`s. A future
+ * Card-only listing page must load details before claiming to filter by allergy here, rather than
+ * calling this and getting a silent pass for everything.
+ */
+export function isRecipeAllergySafe(
+	recipe: { ingredients?: Pick<Ingredient, 'name'>[] },
+	allergies: string[],
+	allergenNameMatch: (name: string, allergy: string) => boolean = defaultAllergenNameMatch
+): boolean {
+	if (allergies.length === 0) return true;
+	const ingredients = recipe.ingredients ?? [];
+	return !ingredients.some((ingredient) =>
+		allergies.some((allergy) => {
+			const trimmed = allergy.trim();
+			// A blank entry would otherwise reduce to an empty stem that every name "starts with",
+			// hiding the entire corpus. Real input for this exists: the onboarding chip list is built
+			// from free text, and a stray comma or a lone space is a plausible thing to end up in it.
+			return trimmed.length > 0 && allergenNameMatch(ingredient.name, trimmed);
+		})
+	);
+}
+
+/** The list form of `isRecipeAllergySafe` — mirrors `filterRecipes`/`filterSafeSubstitutions`'s own
+ *  shape so a caller filtering by allergy reads the same as one filtering by anything else. */
+export function filterAllergySafeRecipes<T extends { ingredients?: Pick<Ingredient, 'name'>[] }>(
+	recipes: T[],
+	allergies: string[]
+): T[] {
+	if (allergies.length === 0) return recipes;
+	return recipes.filter((r) => isRecipeAllergySafe(r, allergies));
 }
 
 export type FacetValueState = 'neutral' | 'include' | 'exclude';
