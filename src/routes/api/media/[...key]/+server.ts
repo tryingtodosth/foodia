@@ -9,12 +9,23 @@
 // private profile, say), it needs its own route with its own check, not a flag bolted onto this
 // one.
 import { error } from '@sveltejs/kit';
+import { getDb } from '$lib/server/db';
+import { isFuwKeyPublic } from '$lib/server/fuw';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ params, platform, request }) => {
+export const GET: RequestHandler = async ({ params, platform, request, locals }) => {
 	if (!platform?.env?.MEDIA) error(503, 'No object storage available');
 	const key = params.key;
 	if (!key) error(400, 'Missing key');
+
+	// Session 29 — anonymous /fuw uploads are private until reviewed: served to an admin, or to
+	// anyone once the submission they belong to is accepted, and otherwise a 404 that doesn't
+	// even confirm the object exists. Checked BEFORE the R2 read so a refused request costs no
+	// object fetch.
+	const isFuw = key.startsWith('fuw/');
+	if (isFuw && !locals.isAdmin) {
+		if (!platform.env.DB || !(await isFuwKeyPublic(getDb(platform), key))) error(404, 'Not found');
+	}
 
 	const object = await platform.env.MEDIA.get(key);
 	if (!object) error(404, 'Not found');
@@ -31,7 +42,9 @@ export const GET: RequestHandler = async ({ params, platform, request }) => {
 	headers.set('etag', object.httpEtag);
 	// Objects are written with a UUID key and never overwritten, so the bytes at a given key are
 	// genuinely immutable — a year-long immutable cache is honest here, not optimistic.
-	headers.set('cache-control', 'public, max-age=31536000, immutable');
+	// A fuw object's visibility can change (accepted, later rejected), so it must not be cached
+	// as immutable by browsers or the edge the way an account upload is.
+	headers.set('cache-control', isFuw ? 'private, max-age=300' : 'public, max-age=31536000, immutable');
 
 	// Conditional GET handled here rather than through R2's own `onlyIf`, on purpose. Two real
 	// incompatibilities made the built-in path the wrong tool: it rejects a quoted ETag (which is

@@ -12,8 +12,20 @@
 
 	let {
 		value = $bindable(''),
-		canUpload = false
-	}: { value?: string; canUpload?: boolean } = $props();
+		canUpload = false,
+		endpoint = '/api/uploads'
+	}: {
+		value?: string;
+		canUpload?: boolean;
+		/** Session 29 — the anonymous /fuw form posts to /api/fuw/uploads instead. */
+		endpoint?: string;
+	} = $props();
+
+	// A local preview of the picked file. Needed for /fuw: its uploads are private until reviewed,
+	// so the submitter's own browser gets a 404 fetching the server URL it was just handed. Showing
+	// the bytes they picked is also simply more honest about what was sent.
+	let localPreview = $state<{ url: string; forValue: string } | null>(null);
+	let previewSrc = $derived(localPreview && localPreview.forValue === value ? localPreview.url : value);
 
 	let uploading = $state(false);
 	let uploadError = $state<string | null>(null);
@@ -28,7 +40,7 @@
 		try {
 			const body = new FormData();
 			body.append('file', file);
-			const res = await fetch('/api/uploads', { method: 'POST', body });
+			const res = await fetch(endpoint, { method: 'POST', body });
 			if (!res.ok) {
 				// SvelteKit's `error()` helper returns { message } — surfacing the server's own reason
 				// (too large, wrong type, no permission) beats a generic failure string, since every
@@ -39,6 +51,8 @@
 			}
 			const data = (await res.json()) as { url: string };
 			value = data.url;
+			if (localPreview) URL.revokeObjectURL(localPreview.url);
+			localPreview = { url: URL.createObjectURL(file), forValue: data.url };
 		} catch {
 			uploadError = t('upload.errorNetwork');
 		} finally {
@@ -74,10 +88,10 @@
 		<p class="error">{uploadError}</p>
 	{/if}
 
-	{#if value}
+	{#if previewSrc}
 		<!-- A real preview, not just a URL echoed back: it's the only way to catch "that link is
 		     dead" or "that's the wrong photo" before publishing. -->
-		<img class="preview" src={value} alt="" />
+		<img class="preview" src={previewSrc} alt="" />
 	{/if}
 </div>
 

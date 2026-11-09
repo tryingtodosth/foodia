@@ -1,6 +1,7 @@
 # `/fuw`: recipe submission form for "Książka kucharska Wydziału Fizyki"
 
-**Status:** 🧩 planned and decided (2026-11-09). Not built yet.
+**Status:** 🎯 built (Session 29, 2026-11-09), verified locally. **Not live on foodia.net until
+the production steps under "Going live" are done.**
 
 ## Goal
 
@@ -17,7 +18,7 @@ book. The organiser reviews it before it goes anywhere.
 | Fields and photos | **Everything the Foodia composer offers, plus photo upload.** |
 | Book output | **CSV/JSON export** from `/admin`. Layout is done outside Foodia. |
 
-## Build plan
+## What was built (the plan, as executed)
 
 1. **Shared form component.** The form body of `/recipes/new` moves into
    `lib/components/recipe/RecipeComposerForm.svelte`. Both `/recipes/new` and `/fuw` use it, so
@@ -66,12 +67,40 @@ book. The organiser reviews it before it goes anywhere.
    - a headless-browser pass in both PL and EN covering an anonymous submit with a photo, the honeypot rejection, the rate limit, admin accept/export/promote, and the `fuw/*` media gate staying closed before acceptance
    - a regression check that `/recipes/new` still works after the extraction
 
-## Still open (small, can be decided during the build)
+## Decided during the build
 
-- **Author of promoted recipes.** Recipes need an `author_id`. The proposal is one dedicated
-  "Książka kucharska FUW" account, with the student's printed name and affiliation kept in the
-  recipe description.
-- **Closing date.** Should the form close itself on a deadline, or stay open until you turn it off?
-- **Production.** Remote D1 still lacks migrations `0002` and `0003`, so `0004` has to go out
-  after them, and the R2 bucket and `ADMIN_EMAILS` secret need to exist before `/fuw` can work on
-  foodia.net.
+- **Author of promoted recipes:** a dedicated `fuw-cookbook` account ("Książka kucharska FUW"),
+  created on first promotion with an unparseable password hash so nobody can log in as it. The
+  contributor's name, affiliation and story go into the recipe description; their email never
+  leaves the staging table. Promoted recipes get the tag `fuw`.
+- **Deleting a promoted submission is refused (409):** the Foodia recipe may be using its photo.
+  Delete the recipe first.
+- **No closing date.** The form stays open until the route is removed. Adding a deadline is a
+  small change if it's wanted.
+- **Abuse limits:** 5 submissions and 30 uploads per salted IP hash per rolling hour, a 200 KB
+  body cap, per-field length caps, up to 6 extra photos.
+
+## Known limits
+
+- Photos uploaded but never submitted stay in R2 (private, never served) with no cleanup job.
+- The IP salt falls back to a fixed local string when `FUW_IP_SALT` is unset. That is fine
+  locally but **must be set in production**: an unsalted IPv4 hash can be brute-forced.
+- Rate limiting is per IP, so a whole faculty NAT shares one allowance of 5 per hour. Raise
+  `FUW_SUBMISSIONS_PER_HOUR` in `lib/server/fuw.ts` if that turns out to bite during a
+  collection drive.
+
+## Going live (needs Cloudflare access; not possible from the dev machine without a login)
+
+1. `npx wrangler d1 migrations apply foodia-db --remote`, which applies `0002`, `0003` and `0004`
+   if they're still pending (`0002`/`0003` were already listed as pending in Session 28).
+2. `npx wrangler r2 bucket create foodia-media`, if it doesn't exist yet.
+3. Pages secrets: `ADMIN_EMAILS` (if not set yet) and a new random `FUW_IP_SALT`, for example
+   `openssl rand -hex 32 | npx wrangler pages secret put FUW_IP_SALT`.
+4. Deploy (or let the GitHub-connected build pick up the push), then submit one test recipe on
+   foodia.net/fuw and delete it from /admin/fuw.
+
+## Verification
+
+- `npm run check` reports 0 errors and 0 warnings.
+- `scripts/verify-fuw-api.py` passes all 40 assertions.
+- `scripts/verify-fuw-ui.mjs` passes all 26 assertions, with zero page errors.

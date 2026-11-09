@@ -13,7 +13,8 @@
 		{ href: '/admin', label: t('admin.tabOverview') },
 		{ href: '/admin/users', label: t('admin.tabUsers') },
 		{ href: '/admin/content', label: t('admin.tabContent') },
-		{ href: '/admin/moderation', label: t('admin.tabModeration') }
+		{ href: '/admin/moderation', label: t('admin.tabModeration') },
+		{ href: '/admin/fuw', label: t('admin.tabFuw') }
 	]);
 
 	// Exact match for the index tab, prefix match for the rest — otherwise /admin would light up

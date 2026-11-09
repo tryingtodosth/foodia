@@ -16,7 +16,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 /** Real, minimal validation — not exhaustive, just enough that a malformed submission fails with a
  *  clear reason instead of a confusing DB constraint error three layers down. */
-function validate(input: CreateRecipeInput): void {
+export function validateRecipeInput(input: CreateRecipeInput): void {
 	if (!input.name?.trim()) throw new RecipeValidationError('Recipe name is required');
 	if (!input.summary?.trim()) throw new RecipeValidationError('Recipe summary is required');
 	if (!input.description?.trim()) throw new RecipeValidationError('Recipe description is required');
@@ -50,7 +50,7 @@ function validate(input: CreateRecipeInput): void {
  *  pretended away here — now a real possibility across MORE statements than before, see `chunk`
  *  above, not just fewer larger ones). Returns the new recipe's id. */
 export async function createRecipe(db: Db, authorId: string, input: CreateRecipeInput): Promise<string> {
-	validate(input);
+	validateRecipeInput(input);
 
 	const recipeId = crypto.randomUUID();
 	const now = new Date().toISOString();

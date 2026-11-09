@@ -241,3 +241,42 @@ export const recognizedSubstitutions = sqliteTable('recognized_substitutions', {
 		.references(() => substitutions.id, { onDelete: 'cascade' }),
 	recognizedAt: text('recognized_at').notNull()
 });
+
+// Session 29 — the /fuw cookbook form ("Książka kucharska Wydziału Fizyki", docs/fuw.md).
+// Deliberately a STAGING table, not rows in `recipes`: these come from anonymous submitters, and
+// nothing reaches the public Foodia feed until an admin accepts a submission and explicitly
+// promotes it. `recipe` holds the full CreateRecipeInput the shared composer form produced, so a
+// promotion is just `createRecipe(recipe)` with no re-mapping.
+export const fuwSubmissions = sqliteTable('fuw_submissions', {
+	id: text('id').primaryKey(),
+	status: text('status', { enum: ['pending', 'accepted', 'rejected'] })
+		.notNull()
+		.default('pending'),
+	/** Interface language the submitter used — not necessarily the recipe's own language, which
+	 *  is `recipe.sourceLocale`. */
+	locale: text('locale').notNull(),
+	recipe: text('recipe', { mode: 'json' }).$type<import('$lib/types/recipeInput').CreateRecipeInput>().notNull(),
+	authorName: text('author_name').notNull(),
+	affiliation: text('affiliation').notNull(),
+	affiliationDetail: text('affiliation_detail'),
+	/** Contact only — never rendered anywhere public, never copied into a promoted recipe. */
+	email: text('email').notNull(),
+	story: text('story'),
+	consentAt: text('consent_at').notNull(),
+	/** Salted SHA-256 of the client IP, kept only for rate limiting. Never the raw address. */
+	ipHash: text('ip_hash').notNull(),
+	submittedAt: text('submitted_at').notNull(),
+	reviewedAt: text('reviewed_at'),
+	reviewedById: text('reviewed_by_id').references(() => users.id, { onDelete: 'set null' }),
+	promotedRecipeId: text('promoted_recipe_id').references(() => recipes.id, { onDelete: 'set null' })
+});
+
+// One row per anonymous /api/fuw/uploads object. It exists for two reasons: rate-limiting uploads
+// per IP hash, and answering "may this R2 object be served publicly?" — a `fuw/` key is served to
+// a non-admin only once the submission it's attached to has been accepted (api/media's own gate).
+export const fuwUploads = sqliteTable('fuw_uploads', {
+	key: text('key').primaryKey(),
+	submissionId: text('submission_id').references(() => fuwSubmissions.id, { onDelete: 'set null' }),
+	ipHash: text('ip_hash').notNull(),
+	createdAt: text('created_at').notNull()
+});

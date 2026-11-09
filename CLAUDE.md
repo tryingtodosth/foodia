@@ -12,6 +12,7 @@ The long-form record lives in [`docs/`](docs/README.md). Read the part you need,
 - `docs/modules.md`: per-module specs and design decisions (§4.1–4.13)
 - `docs/issues.md`: known gaps and limits, numbered (§7 items 1–29)
 - `docs/roadmap.md`, `docs/product.md`: P2/P3 designs, phasing, open questions (§6, §0/§2/§8)
+- `docs/fuw.md`: `/fuw`, the anonymous recipe-submission form for the Physics Faculty cookbook, and its `/admin/fuw` review tab
 - `docs/build-log.md`: what each session did and found (§9). **Append to it** when you finish a session's work.
 
 When a code comment says "CLAUDE.md 4.5" or "Section 7 item 3", look in `docs/`. Section numbers
@@ -25,6 +26,7 @@ npm run check               # svelte-check. Baseline is 0 errors, 0 warnings; ke
 npm run build               # Cloudflare Pages target (adapter-cloudflare)
 npm run build:capacitor     # static target (adapter-static, BUILD_TARGET=capacitor) -> build-capacitor/
 npx tsx scripts/verify-units.ts            # logic checks; also verify-recipe-matrix.ts, verify-cooking-session.ts
+# browser/API checks (need `npm run dev`): verify-cooking-ui.mjs, verify-fuw-ui.mjs, verify-fuw-api.py
 npx drizzle-kit generate                   # schema.ts -> new SQL migration in drizzle/
 npx wrangler d1 migrations apply foodia-db --local    # use --remote for production
 npm run deploy              # build + wrangler pages deploy. Ask before running it.
@@ -79,7 +81,8 @@ interface language.
 - Clear the build caches first (`rm -rf .svelte-kit build-capacitor node_modules/.vite`) to avoid stale chunk 404s.
 - Expect a short propagation window after a deploy.
 - Scripts that call production need a browser `User-Agent`, or Cloudflare's WAF returns 403/1010.
-- Remote D1 lags local: migrations `0002` and `0003` are applied locally only, as of Session 28.
+- Remote D1 lags local: migrations `0002`–`0004` are applied locally only, as of Session 29. `docs/fuw.md` lists the production steps.
+- Anonymous write paths (`/api/fuw/*`) rate-limit on a salted IP hash. Set `FUW_IP_SALT` as a secret in production.
 
 **Shared host.** Builds can be OOM-killed by unrelated processes. Retry before debugging, and stop
 the dev server's `workerd` before a production build.
